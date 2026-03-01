@@ -40,6 +40,7 @@ import {
   encryptToBinaryEnvelopeWithCompression,
 } from "../crypto/index.js";
 import type { SrpServerSession } from "../crypto/index.js";
+import type { EmulatorBridgeService } from "../emulator/EmulatorBridgeService.js";
 import { getLogger } from "../logging/logger.js";
 import { WS_INTERNAL_AUTHENTICATED } from "../middleware/internal-auth.js";
 import type {
@@ -209,6 +210,8 @@ export interface RelayHandlerDeps {
   browserProfileService?: BrowserProfileService;
   /** Focused session watch manager for per-session targeted file watching (optional) */
   focusedSessionWatchManager?: FocusedSessionWatchManager;
+  /** Emulator bridge service for Android emulator streaming (optional) */
+  emulatorBridgeService?: EmulatorBridgeService;
 }
 
 /**
@@ -1002,6 +1005,27 @@ export async function handleMessage(
       onUploadEnd: async (uploadEndMsg) =>
         handleUploadEnd(uploads, uploadEndMsg, send, uploadManager),
       onPing: async (pingMsg) => send({ type: "pong", id: pingMsg.id }),
+      onEmulatorMessage: deps.emulatorBridgeService
+        ? (() => {
+            const bridge = deps.emulatorBridgeService;
+            return async (emulatorMsg: RemoteClientMessage) => {
+              switch (emulatorMsg.type) {
+                case "emulator_stream_start":
+                  await bridge.startStream(emulatorMsg, send);
+                  break;
+                case "emulator_stream_stop":
+                  bridge.stopStream(emulatorMsg);
+                  break;
+                case "emulator_webrtc_answer":
+                  bridge.handleAnswer(emulatorMsg);
+                  break;
+                case "emulator_ice_candidate":
+                  bridge.handleICE(emulatorMsg);
+                  break;
+              }
+            };
+          })()
+        : undefined,
     });
 
   const parsed = await decodeFrameToParsedMessage(

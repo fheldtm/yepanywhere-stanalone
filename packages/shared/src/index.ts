@@ -281,6 +281,21 @@ export type {
 } from "./opencode-schema/types.js";
 export { parseOpenCodeSSEEvent } from "./opencode-schema/events.js";
 
+// Emulator streaming types (for Android emulator remote control)
+export type {
+  EmulatorInfo,
+  EmulatorStreamStart,
+  EmulatorStreamStop,
+  EmulatorWebRTCAnswer,
+  EmulatorICECandidate,
+  EmulatorClientMessage,
+  EmulatorWebRTCOffer,
+  EmulatorICECandidateEvent,
+  EmulatorSessionState,
+  EmulatorServerMessage,
+  RTCIceCandidateInit,
+} from "./emulator.js";
+
 // Relay protocol types (for remote access via WebSocket)
 export type {
   RelayHttpMethod,

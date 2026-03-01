@@ -1,7 +1,7 @@
 package stream
 
 import (
-	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -9,6 +9,14 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
 )
+
+// ICECandidateJSON is the JSON-serializable form of an ICE candidate.
+type ICECandidateJSON struct {
+	Candidate        string  `json:"candidate"`
+	SDPMid           *string `json:"sdpMid,omitempty"`
+	SDPMLineIndex    *uint16 `json:"sdpMLineIndex,omitempty"`
+	UsernameFragment *string `json:"usernameFragment,omitempty"`
+}
 
 // PeerSession represents one WebRTC connection to a browser.
 type PeerSession struct {
@@ -20,7 +28,8 @@ type PeerSession struct {
 }
 
 // NewPeerSession creates a PeerConnection with an h264 video track and a "control" DataChannel.
-func NewPeerSession(stunServers []string, onInput func(msg []byte)) (*PeerSession, error) {
+// onICE is called for each trickle ICE candidate (nil candidate means gathering complete).
+func NewPeerSession(stunServers []string, onInput func(msg []byte), onICE func(*ICECandidateJSON)) (*PeerSession, error) {
 	iceServers := []webrtc.ICEServer{}
 	if len(stunServers) > 0 {
 		iceServers = append(iceServers, webrtc.ICEServer{URLs: stunServers})
@@ -84,12 +93,45 @@ func NewPeerSession(stunServers []string, onInput func(msg []byte)) (*PeerSessio
 		}
 	})
 
+	// Trickle ICE: emit candidates as they are discovered.
+	if onICE != nil {
+		pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+			if c == nil {
+				// Gathering complete.
+				onICE(nil)
+				return
+			}
+			init := c.ToJSON()
+			onICE(&ICECandidateJSON{
+				Candidate:        init.Candidate,
+				SDPMid:           init.SDPMid,
+				SDPMLineIndex:    init.SDPMLineIndex,
+				UsernameFragment: init.UsernameFragment,
+			})
+		})
+	}
+
 	return ps, nil
 }
 
-// CreateOffer creates an SDP offer and blocks until ICE gathering is complete.
-// Returns the SDP with all candidates embedded.
+// CreateOffer creates an SDP offer and returns it immediately (without waiting for ICE gathering).
+// ICE candidates are delivered via the onICE callback passed to NewPeerSession.
 func (ps *PeerSession) CreateOffer() (string, error) {
+	offer, err := ps.pc.CreateOffer(nil)
+	if err != nil {
+		return "", fmt.Errorf("creating offer: %w", err)
+	}
+
+	if err := ps.pc.SetLocalDescription(offer); err != nil {
+		return "", fmt.Errorf("setting local description: %w", err)
+	}
+
+	return offer.SDP, nil
+}
+
+// CreateOfferGathered creates an SDP offer and blocks until ICE gathering is complete.
+// Returns the SDP with all candidates embedded. Used for standalone (non-IPC) mode.
+func (ps *PeerSession) CreateOfferGathered() (string, error) {
 	offer, err := ps.pc.CreateOffer(nil)
 	if err != nil {
 		return "", fmt.Errorf("creating offer: %w", err)
@@ -101,13 +143,9 @@ func (ps *PeerSession) CreateOffer() (string, error) {
 		return "", fmt.Errorf("setting local description: %w", err)
 	}
 
-	// Wait for ICE gathering with timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	select {
 	case <-gatherComplete:
-	case <-ctx.Done():
+	case <-time.After(10 * time.Second):
 		return "", fmt.Errorf("ICE gathering timed out")
 	}
 
@@ -119,6 +157,20 @@ func (ps *PeerSession) SetAnswer(sdp string) error {
 	return ps.pc.SetRemoteDescription(webrtc.SessionDescription{
 		Type: webrtc.SDPTypeAnswer,
 		SDP:  sdp,
+	})
+}
+
+// AddICECandidate adds a remote ICE candidate (trickle ICE).
+func (ps *PeerSession) AddICECandidate(candidateJSON []byte) error {
+	var candidate ICECandidateJSON
+	if err := json.Unmarshal(candidateJSON, &candidate); err != nil {
+		return fmt.Errorf("parsing ICE candidate: %w", err)
+	}
+	return ps.pc.AddICECandidate(webrtc.ICECandidateInit{
+		Candidate:        candidate.Candidate,
+		SDPMid:           candidate.SDPMid,
+		SDPMLineIndex:    candidate.SDPMLineIndex,
+		UsernameFragment: candidate.UsernameFragment,
 	})
 }
 

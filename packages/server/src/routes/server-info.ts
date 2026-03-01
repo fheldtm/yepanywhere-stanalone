@@ -4,6 +4,13 @@ export interface ServerInfoOptions {
   host: string;
   port: number;
   installId?: string;
+  /** Whether emulator streaming is available (ADB detected + sidecar binary exists) */
+  emulatorAvailable?: boolean;
+}
+
+export interface ServerCapabilities {
+  /** Whether Android emulator streaming is available */
+  emulator: boolean;
 }
 
 export interface ServerInfo {
@@ -17,6 +24,8 @@ export interface ServerInfo {
   localhostOnly: boolean;
   /** Unique installation identifier for this server instance */
   installId?: string;
+  /** Server capabilities (optional features) */
+  capabilities?: ServerCapabilities;
 }
 
 export function createServerInfoRoutes(options: ServerInfoOptions) {
@@ -32,6 +41,9 @@ export function createServerInfoRoutes(options: ServerInfoOptions) {
         options.host === "localhost" ||
         options.host === "::1",
       installId: options.installId,
+      capabilities: {
+        emulator: options.emulatorAvailable ?? false,
+      },
     };
     return c.json(info);
   });

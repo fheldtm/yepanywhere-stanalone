@@ -2,6 +2,7 @@ import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import type { WSEvents } from "hono/ws";
 import type { WebSocket as RawWebSocket } from "ws";
+import type { EmulatorBridgeService } from "../emulator/EmulatorBridgeService.js";
 import { isAllowedOrigin } from "../middleware/allowed-hosts.js";
 import type {
   RemoteAccessService,
@@ -56,6 +57,8 @@ export interface WsRelayDeps {
   browserProfileService?: BrowserProfileService;
   /** Focused session watch manager for per-session targeted file watching (optional) */
   focusedSessionWatchManager?: FocusedSessionWatchManager;
+  /** Emulator bridge service for Android emulator streaming (optional) */
+  emulatorBridgeService?: EmulatorBridgeService;
 }
 
 /**
@@ -83,6 +86,8 @@ export interface AcceptRelayConnectionDeps {
   browserProfileService?: BrowserProfileService;
   /** Focused session watch manager for per-session targeted file watching (optional) */
   focusedSessionWatchManager?: FocusedSessionWatchManager;
+  /** Emulator bridge service for Android emulator streaming (optional) */
+  emulatorBridgeService?: EmulatorBridgeService;
 }
 
 /**
@@ -162,6 +167,7 @@ export function createWsRelayRoutes(
     connectedBrowsers,
     browserProfileService,
     focusedSessionWatchManager,
+    emulatorBridgeService,
   } = deps;
 
   // Build handler dependencies
@@ -176,6 +182,7 @@ export function createWsRelayRoutes(
     connectedBrowsers,
     browserProfileService,
     focusedSessionWatchManager,
+    emulatorBridgeService,
   };
 
   // Return the WebSocket handler with origin validation
@@ -329,6 +336,7 @@ export function createAcceptRelayConnection(
     connectedBrowsers,
     browserProfileService,
     focusedSessionWatchManager,
+    emulatorBridgeService,
   } = deps;
 
   // Build handler dependencies
@@ -343,6 +351,7 @@ export function createAcceptRelayConnection(
     connectedBrowsers,
     browserProfileService,
     focusedSessionWatchManager,
+    emulatorBridgeService,
   };
 
   // Return the accept relay connection handler

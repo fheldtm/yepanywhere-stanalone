@@ -2,30 +2,49 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/anthropics/yepanywhere/emulator-bridge/internal/emulator"
 	"github.com/anthropics/yepanywhere/emulator-bridge/internal/encoder"
+	"github.com/anthropics/yepanywhere/emulator-bridge/internal/ipc"
 	"github.com/anthropics/yepanywhere/emulator-bridge/internal/stream"
 )
 
 //go:embed web
 var webFS embed.FS
 
+const bridgeVersion = "0.1.0"
+
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
-	emuAddr := flag.String("emu", "localhost:8554", "Emulator gRPC address")
+	addr := flag.String("addr", ":8080", "HTTP listen address (standalone mode)")
+	emuAddr := flag.String("emu", "localhost:8554", "Emulator gRPC address (standalone mode)")
 	maxWidth := flag.Int("width", 540, "Max output width for video encoding")
 	fps := flag.Int("fps", 30, "Target frame rate for encoder rate control")
+	ipcMode := flag.Bool("ipc", false, "IPC mode: random port, stdout handshake, WebSocket protocol")
+	adbPath := flag.String("adb-path", "adb", "Path to adb binary")
 	flag.Parse()
 
-	// 1. Connect to emulator.
-	log.Printf("Connecting to emulator at %s...", *emuAddr)
-	client, err := emulator.NewClient(*emuAddr)
+	if *ipcMode {
+		runIPC(*adbPath)
+	} else {
+		runStandalone(*addr, *emuAddr, *maxWidth, *fps)
+	}
+}
+
+// runStandalone runs the original Phase 1 mode: single emulator, HTTP signaling, embedded test page.
+func runStandalone(addr, emuAddr string, maxWidth, fps int) {
+	log.Printf("Connecting to emulator at %s...", emuAddr)
+	client, err := emulator.NewClient(emuAddr)
 	if err != nil {
 		log.Fatalf("Failed to connect to emulator: %v", err)
 	}
@@ -34,38 +53,30 @@ func main() {
 	srcW, srcH := client.ScreenSize()
 	log.Printf("Emulator screen: %dx%d", srcW, srcH)
 
-	// 2. Compute target resolution.
-	targetW, targetH := encoder.ComputeTargetSize(int(srcW), int(srcH), *maxWidth)
+	targetW, targetH := encoder.ComputeTargetSize(int(srcW), int(srcH), maxWidth)
 	log.Printf("Encoding resolution: %dx%d", targetW, targetH)
 
-	// 3. Create h264 encoder.
-	h264Enc, err := encoder.NewH264Encoder(targetW, targetH, *fps)
+	h264Enc, err := encoder.NewH264Encoder(targetW, targetH, fps)
 	if err != nil {
 		log.Fatalf("Failed to create encoder: %v", err)
 	}
 	defer h264Enc.Close()
 
-	// 4. Start frame source.
 	frameSource := emulator.NewFrameSource(client)
 	defer frameSource.Stop()
 
-	// 5. Create input handler.
 	inputHandler := stream.NewInputHandler(client)
 
-	// 6. Create signaling handler.
 	stunServers := []string{"stun:stun.l.google.com:19302"}
 	sigHandler := stream.NewSignalingHandler(
 		frameSource, h264Enc, inputHandler,
 		stunServers, targetW, targetH,
 	)
 
-	// 7. Set up HTTP routes.
 	mux := http.NewServeMux()
 
-	// Serve embedded web files.
 	webRoot, err := fs.Sub(webFS, "web")
 	if err != nil {
-		// Fallback: try the full path (embed includes the ../../web path components differently).
 		webRoot, _ = fs.Sub(webFS, ".")
 	}
 	mux.Handle("/", http.FileServer(http.FS(webRoot)))
@@ -78,8 +89,173 @@ func main() {
 			srcW, srcH, targetW, targetH)
 	})
 
-	log.Printf("Listening on %s", *addr)
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	log.Printf("Listening on %s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("HTTP server error: %v", err)
 	}
+}
+
+// runIPC runs in IPC mode: picks a random port, prints handshake to stdout,
+// serves REST endpoints and WebSocket for Yep server communication.
+func runIPC(adbPath string) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatalf("Failed to listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	stunServers := []string{"stun:stun.l.google.com:19302"}
+	handler := ipc.NewHandler(adbPath, stunServers)
+
+	startedAt := time.Now()
+	mux := http.NewServeMux()
+
+	// Health endpoint.
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		uptime := int64(time.Since(startedAt).Seconds())
+		fmt.Fprintf(w, `{"ok":true,"version":"%s","uptime":%d}`, bridgeVersion, uptime)
+	})
+
+	// Emulator discovery endpoints.
+	mux.HandleFunc("/emulators", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		emulators, err := handler.GetDiscovery().ListEmulators()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("discovery error: %v", err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(emulators)
+	})
+
+	mux.HandleFunc("/emulators/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/emulators/")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) != 2 {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		emulatorID := parts[0]
+		action := parts[1]
+
+		switch action {
+		case "screenshot":
+			handleScreenshot(w, r, emulatorID)
+		case "start":
+			handleEmulatorStart(w, r, emulatorID)
+		case "stop":
+			handleEmulatorStop(w, r, emulatorID)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	})
+
+	// Shutdown endpoint.
+	mux.HandleFunc("/shutdown", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			log.Println("Shutdown requested, exiting...")
+			os.Exit(0)
+		}()
+	})
+
+	// WebSocket IPC endpoint.
+	mux.HandleFunc("/ws", handler.ServeWS)
+
+	// Print handshake to stdout (Yep server reads this).
+	handshake, _ := json.Marshal(map[string]interface{}{
+		"port":    port,
+		"version": bridgeVersion,
+	})
+	fmt.Fprintln(os.Stdout, string(handshake))
+
+	log.Printf("IPC mode: listening on 127.0.0.1:%d", port)
+	if err := http.Serve(listener, mux); err != nil {
+		log.Fatalf("HTTP server error: %v", err)
+	}
+}
+
+func handleScreenshot(w http.ResponseWriter, r *http.Request, emulatorID string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	grpcAddr := ipc.GRPCAddr(emulatorID)
+	client, err := emulator.NewClient(grpcAddr)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("connect error: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer client.Close()
+
+	frameSource := emulator.NewFrameSource(client)
+	defer frameSource.Stop()
+
+	id, frames := frameSource.Subscribe()
+	defer frameSource.Unsubscribe(id)
+
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case frame := <-frames:
+		targetW, targetH := encoder.ComputeTargetSize(int(frame.Width), int(frame.Height), 360)
+		scaled := encoder.Scale(frame.Data, int(frame.Width), int(frame.Height), targetW, targetH)
+		jpegData := encoder.RGBToJPEG(scaled, targetW, targetH)
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Write(jpegData)
+	case <-timer.C:
+		http.Error(w, "timeout waiting for frame", http.StatusGatewayTimeout)
+	case <-r.Context().Done():
+		http.Error(w, "request canceled", http.StatusGatewayTimeout)
+	}
+}
+
+func handleEmulatorStart(w http.ResponseWriter, r *http.Request, emulatorID string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	avdName := strings.TrimPrefix(emulatorID, "avd-")
+	if avdName == emulatorID {
+		http.Error(w, "emulator already running", http.StatusConflict)
+		return
+	}
+
+	go func() {
+		cmd := exec.Command("emulator", "-avd", avdName, "-no-window")
+		if err := cmd.Start(); err != nil {
+			log.Printf("failed to start emulator %s: %v", avdName, err)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"ok":true}`))
+}
+
+func handleEmulatorStop(w http.ResponseWriter, r *http.Request, emulatorID string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cmd := exec.Command("adb", "-s", emulatorID, "emu", "kill")
+	if err := cmd.Run(); err != nil {
+		log.Printf("failed to stop emulator %s: %v", emulatorID, err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"ok":true}`))
 }

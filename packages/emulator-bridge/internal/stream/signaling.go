@@ -66,13 +66,13 @@ func (sh *SignalingHandler) HandleConnect(w http.ResponseWriter, r *http.Request
 	// Close existing session if any.
 	sh.closeSessionLocked()
 
-	session, err := NewPeerSession(sh.stunServers, sh.inputHandler.HandleMessage)
+	session, err := NewPeerSession(sh.stunServers, sh.inputHandler.HandleMessage, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("creating session: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	sdp, err := session.CreateOffer()
+	sdp, err := session.CreateOfferGathered()
 	if err != nil {
 		session.Close()
 		http.Error(w, fmt.Sprintf("creating offer: %v", err), http.StatusInternalServerError)

@@ -8,6 +8,15 @@
  */
 
 import type { OriginMetadata } from "./connection.js";
+import type {
+  EmulatorICECandidate,
+  EmulatorICECandidateEvent,
+  EmulatorSessionState,
+  EmulatorStreamStart,
+  EmulatorStreamStop,
+  EmulatorWebRTCAnswer,
+  EmulatorWebRTCOffer,
+} from "./emulator.js";
 import type { UploadedFile } from "./upload.js";
 
 // Re-export OriginMetadata for convenience
@@ -224,7 +233,12 @@ export type RemoteClientMessage =
   | RelayUploadChunk
   | RelayUploadEnd
   | ClientCapabilities
-  | ClientPing;
+  | ClientPing
+  // Emulator streaming signaling
+  | EmulatorStreamStart
+  | EmulatorStreamStop
+  | EmulatorWebRTCAnswer
+  | EmulatorICECandidate;
 
 /** All messages from yepanywhere server -> phone/browser */
 export type YepMessage =
@@ -233,7 +247,11 @@ export type YepMessage =
   | RelayUploadProgress
   | RelayUploadComplete
   | RelayUploadError
-  | ServerPong;
+  | ServerPong
+  // Emulator streaming signaling
+  | EmulatorWebRTCOffer
+  | EmulatorICECandidateEvent
+  | EmulatorSessionState;
 
 /** All relay protocol messages */
 export type RelayMessage = RemoteClientMessage | YepMessage;
