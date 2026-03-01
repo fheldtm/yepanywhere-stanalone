@@ -169,18 +169,28 @@ func (sh *SignalingHandler) runPipeline(session *PeerSession, done chan struct{}
 				return
 			}
 
-			// 1. Scale.
-			scaled := encoder.Scale(
+			// Drain stale frames — always encode the freshest one.
+			for {
+				select {
+				case newer, ok2 := <-frames:
+					if !ok2 {
+						return
+					}
+					frame = newer
+				default:
+					goto encode
+				}
+			}
+		encode:
+
+			y, cb, cr := encoder.ScaleAndConvertToI420(
 				frame.Data,
 				int(frame.Width), int(frame.Height),
 				sh.targetW, sh.targetH,
 			)
 
-			// 2. Convert RGB -> I420.
-			y, cb, cr := encoder.RGBToI420(scaled, sh.targetW, sh.targetH)
-
-			// 3. Encode to h264.
 			nals, err := sh.enc.Encode(y, cb, cr)
+			encoder.ReleaseI420(y)
 			if err != nil {
 				log.Printf("pipeline: encode error: %v", err)
 				continue
@@ -189,7 +199,6 @@ func (sh *SignalingHandler) runPipeline(session *PeerSession, done chan struct{}
 				continue
 			}
 
-			// 4. Write to WebRTC.
 			now := time.Now()
 			duration := time.Second / 30
 			if !lastTime.IsZero() {

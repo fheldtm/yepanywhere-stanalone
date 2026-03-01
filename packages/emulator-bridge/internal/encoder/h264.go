@@ -24,7 +24,7 @@ func NewH264Encoder(width, height, fps int) (*H264Encoder, error) {
 		Width:     width,
 		Height:    height,
 		FrameRate: fps,
-		Preset:    "veryfast",
+		Preset:    "ultrafast",
 		Tune:      "zerolatency",
 		Profile:   "baseline",
 		LogLevel:  x264.LogWarning,

@@ -108,7 +108,7 @@ func (c *Client) StreamScreenshots(ctx context.Context) (<-chan *Frame, error) {
 		return nil, fmt.Errorf("starting screenshot stream: %w", err)
 	}
 
-	ch := make(chan *Frame, 4)
+	ch := make(chan *Frame, 2)
 	go func() {
 		defer close(ch)
 		for {

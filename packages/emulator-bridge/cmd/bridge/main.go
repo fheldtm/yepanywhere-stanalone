@@ -28,7 +28,7 @@ const bridgeVersion = "0.1.0"
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address (standalone mode)")
 	emuAddr := flag.String("emu", "localhost:8554", "Emulator gRPC address (standalone mode)")
-	maxWidth := flag.Int("width", 540, "Max output width for video encoding")
+	maxWidth := flag.Int("width", 360, "Max output width for video encoding")
 	fps := flag.Int("fps", 30, "Target frame rate for encoder rate control")
 	ipcMode := flag.Bool("ipc", false, "IPC mode: random port, stdout handshake, WebSocket protocol")
 	adbPath := flag.String("adb-path", "adb", "Path to adb binary")

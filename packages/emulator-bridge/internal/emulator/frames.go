@@ -48,7 +48,7 @@ func (fs *FrameSource) Subscribe() (id int, ch <-chan *Frame) {
 
 	id = fs.nextID
 	fs.nextID++
-	c := make(chan *Frame, 4)
+	c := make(chan *Frame, 2)
 	fs.subs[id] = c
 
 	// Replay the last frame so subscribers that join after the initial

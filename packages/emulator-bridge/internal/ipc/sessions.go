@@ -65,7 +65,7 @@ func (sm *SessionManager) StartSession(sessionID, emulatorID string, opts Sessio
 	// Defaults.
 	maxWidth := opts.MaxWidth
 	if maxWidth <= 0 {
-		maxWidth = 540
+		maxWidth = 360
 	}
 	maxFPS := opts.MaxFPS
 	if maxFPS <= 0 {
@@ -261,15 +261,28 @@ func (sm *SessionManager) runPipeline(sess *streamSession) {
 				return
 			}
 
-			scaled := encoder.Scale(
+			// Drain any stale frames — always encode the freshest one.
+			for {
+				select {
+				case newer, ok2 := <-frames:
+					if !ok2 {
+						return
+					}
+					frame = newer
+				default:
+					goto encode
+				}
+			}
+		encode:
+
+			y, cb, cr := encoder.ScaleAndConvertToI420(
 				frame.Data,
 				int(frame.Width), int(frame.Height),
 				sess.targetW, sess.targetH,
 			)
 
-			y, cb, cr := encoder.RGBToI420(scaled, sess.targetW, sess.targetH)
-
 			nals, err := sess.enc.Encode(y, cb, cr)
+			encoder.ReleaseI420(y) // return pooled buffer
 			if err != nil {
 				log.Printf("[session %s] encode error: %v", sess.sessionID, err)
 				continue
