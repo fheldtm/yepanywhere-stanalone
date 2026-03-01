@@ -28,8 +28,22 @@ export function detectAdb(): string | null {
   const home = os.homedir();
   const candidates = isWindows
     ? [
-        path.join(home, "AppData", "Local", "Android", "Sdk", "platform-tools", "adb.exe"),
-        path.join(process.env.LOCALAPPDATA || "", "Android", "Sdk", "platform-tools", "adb.exe"),
+        path.join(
+          home,
+          "AppData",
+          "Local",
+          "Android",
+          "Sdk",
+          "platform-tools",
+          "adb.exe",
+        ),
+        path.join(
+          process.env.LOCALAPPDATA || "",
+          "Android",
+          "Sdk",
+          "platform-tools",
+          "adb.exe",
+        ),
       ]
     : [
         path.join(home, "Android", "Sdk", "platform-tools", "adb"),
