@@ -92,7 +92,7 @@ func (sm *SessionManager) resetIdleTimer() {
 }
 
 // StartSession creates a new streaming session for the given device.
-func (sm *SessionManager) StartSession(sessionID, deviceID string, opts SessionStartOptions) error {
+func (sm *SessionManager) StartSession(sessionID, deviceID, deviceType string, opts SessionStartOptions) error {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
@@ -114,9 +114,9 @@ func (sm *SessionManager) StartSession(sessionID, deviceID string, opts SessionS
 	}
 
 	// Acquire shared device from pool.
-	log.Printf("[session %s] connecting to device %s", sessionID, deviceID)
+	log.Printf("[session %s] connecting to device %s (type=%s)", sessionID, deviceID, deviceType)
 
-	client, err := sm.pool.AcquireDevice(deviceID)
+	client, err := sm.pool.AcquireDevice(deviceID, deviceType)
 	if err != nil {
 		sm.sendState(sessionID, "failed", fmt.Sprintf("device connect: %v", err))
 		return fmt.Errorf("connecting to device: %w", err)

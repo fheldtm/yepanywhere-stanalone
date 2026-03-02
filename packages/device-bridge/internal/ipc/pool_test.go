@@ -32,3 +32,17 @@ func TestAndroidSerialForDeviceIDEmulatorOverrideEnv(t *testing.T) {
 		t.Fatalf("expected emulator id to map to android serial with override env: ok=%v serial=%q", ok, serial)
 	}
 }
+
+func TestAndroidSerialForDeviceExplicitType(t *testing.T) {
+	t.Setenv(useAPKForEmulatorEnvVar, "")
+
+	if serial, ok := androidSerialForDevice("00008110-001234567890801E", "android"); !ok || serial != "00008110-001234567890801E" {
+		t.Fatalf("explicit android type should use raw ID as serial: ok=%v serial=%q", ok, serial)
+	}
+	if serial, ok := androidSerialForDevice("android:emulator-5554", "android"); !ok || serial != "emulator-5554" {
+		t.Fatalf("explicit android type should accept android: prefix: ok=%v serial=%q", ok, serial)
+	}
+	if _, ok := androidSerialForDevice("00008110-001234567890801E", "ios-simulator"); ok {
+		t.Fatal("ios-simulator type must not resolve as android serial")
+	}
+}

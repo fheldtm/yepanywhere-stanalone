@@ -54,7 +54,7 @@ func NewResourcePool(adbPath string) *ResourcePool {
 }
 
 // AcquireDevice returns a shared device connection, creating one if needed.
-func (rp *ResourcePool) AcquireDevice(deviceID string) (device.Device, error) {
+func (rp *ResourcePool) AcquireDevice(deviceID, deviceType string) (device.Device, error) {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 
@@ -64,7 +64,7 @@ func (rp *ResourcePool) AcquireDevice(deviceID string) (device.Device, error) {
 		return entry.client, nil
 	}
 
-	client, err := rp.createDeviceLocked(deviceID)
+	client, err := rp.createDeviceLocked(deviceID, deviceType)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +74,44 @@ func (rp *ResourcePool) AcquireDevice(deviceID string) (device.Device, error) {
 	return client, nil
 }
 
-func (rp *ResourcePool) createDeviceLocked(deviceID string) (device.Device, error) {
+func (rp *ResourcePool) createDeviceLocked(deviceID, deviceType string) (device.Device, error) {
+	switch strings.ToLower(strings.TrimSpace(deviceType)) {
+	case "chromeos":
+		host := os.Getenv("CHROMEOS_HOST")
+		if strings.HasPrefix(deviceID, "chromeos:") {
+			host = strings.TrimPrefix(deviceID, "chromeos:")
+		}
+		d, err := device.NewChromeOSDevice(host)
+		if err != nil {
+			return nil, fmt.Errorf("connecting to chromeos device %s: %w", deviceID, err)
+		}
+		return d, nil
+	case "android":
+		if serial, ok := androidSerialForDevice(deviceID, "android"); ok {
+			d, err := device.NewAndroidDevice(serial, rp.adbPath)
+			if err != nil {
+				return nil, fmt.Errorf("connecting to android device %s (id=%s): %w", serial, deviceID, err)
+			}
+			return d, nil
+		}
+		return nil, fmt.Errorf("invalid android device id: %s", deviceID)
+	case "emulator":
+		if strings.HasPrefix(deviceID, "emulator-") {
+			grpcAddr := GRPCAddr(deviceID)
+			d, err := emulator.NewClient(grpcAddr)
+			if err != nil {
+				return nil, fmt.Errorf("connecting to emulator %s: %w", deviceID, err)
+			}
+			return d, nil
+		}
+		if strings.HasPrefix(deviceID, "avd-") {
+			return nil, fmt.Errorf("device %s is not running", deviceID)
+		}
+		return nil, fmt.Errorf("invalid emulator device id: %s", deviceID)
+	case "ios-simulator":
+		return nil, fmt.Errorf("ios simulator transport not implemented yet for device %s", deviceID)
+	}
+
 	if deviceID == "chromeos" || strings.HasPrefix(deviceID, "chromeos:") {
 		host := os.Getenv("CHROMEOS_HOST")
 		if strings.HasPrefix(deviceID, "chromeos:") {
@@ -87,7 +124,7 @@ func (rp *ResourcePool) createDeviceLocked(deviceID string) (device.Device, erro
 		return d, nil
 	}
 
-	if serial, ok := androidSerialForDeviceID(deviceID); ok {
+	if serial, ok := androidSerialForDevice(deviceID, ""); ok {
 		d, err := device.NewAndroidDevice(serial, rp.adbPath)
 		if err != nil {
 			return nil, fmt.Errorf("connecting to android device %s (id=%s): %w", serial, deviceID, err)
@@ -182,6 +219,23 @@ func (rp *ResourcePool) CloseAll() {
 }
 
 func androidSerialForDeviceID(deviceID string) (string, bool) {
+	return androidSerialForDevice(deviceID, "")
+}
+
+func androidSerialForDevice(deviceID, deviceType string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(deviceType)) {
+	case "android":
+		// Accept either explicit "android:<serial>" IDs or plain adb serials.
+		if strings.HasPrefix(deviceID, "android:") {
+			serial := strings.TrimSpace(strings.TrimPrefix(deviceID, "android:"))
+			return serial, serial != ""
+		}
+		serial := strings.TrimSpace(deviceID)
+		return serial, serial != ""
+	case "emulator", "chromeos", "ios-simulator":
+		return "", false
+	}
+
 	// Explicit override: route any device ID through Android APK transport.
 	// Example: "android:emulator-5554" or "android:R3CN90ABCDE"
 	if strings.HasPrefix(deviceID, "android:") {

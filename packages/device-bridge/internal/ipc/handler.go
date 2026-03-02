@@ -82,12 +82,13 @@ func (h *Handler) GetDiscovery() *Discovery {
 
 // ipcMessage is the minimal structure for routing.
 type ipcMessage struct {
-	Type      string               `json:"type"`
-	SessionID string               `json:"sessionId,omitempty"`
-	DeviceID  string               `json:"deviceId,omitempty"`
-	SDP       string               `json:"sdp,omitempty"`
-	Candidate json.RawMessage      `json:"candidate,omitempty"`
-	Options   *SessionStartOptions `json:"options,omitempty"`
+	Type       string               `json:"type"`
+	SessionID  string               `json:"sessionId,omitempty"`
+	DeviceID   string               `json:"deviceId,omitempty"`
+	DeviceType string               `json:"deviceType,omitempty"`
+	SDP        string               `json:"sdp,omitempty"`
+	Candidate  json.RawMessage      `json:"candidate,omitempty"`
+	Options    *SessionStartOptions `json:"options,omitempty"`
 }
 
 func (h *Handler) handleMessage(data []byte) {
@@ -103,7 +104,7 @@ func (h *Handler) handleMessage(data []byte) {
 		if msg.Options != nil {
 			opts = *msg.Options
 		}
-		if err := h.sessions.StartSession(msg.SessionID, msg.DeviceID, opts); err != nil {
+		if err := h.sessions.StartSession(msg.SessionID, msg.DeviceID, msg.DeviceType, opts); err != nil {
 			log.Printf("ipc: session.start error: %v", err)
 		}
 

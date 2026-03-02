@@ -612,6 +612,7 @@ export class DeviceBridgeService {
       type: "session.start",
       sessionId: msg.sessionId,
       deviceId: msg.deviceId,
+      deviceType: msg.deviceType,
       options: msg.options,
     });
   }
