@@ -17,6 +17,7 @@ export {
   BashOutputResultSchema,
   TaskOutputResultSchema,
   KillShellResultSchema,
+  TaskStopResultSchema,
   EnterPlanModeResultSchema,
   ExitPlanModeResultSchema,
 } from "./ToolResultSchemas.js";

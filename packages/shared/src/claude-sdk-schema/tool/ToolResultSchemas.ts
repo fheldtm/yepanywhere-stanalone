@@ -35,13 +35,18 @@ const ContentBlockSchema = z.object({
  * Task tool structured result (success case)
  */
 const TaskResultObjectSchema = z.object({
-  status: z.enum(["completed", "failed", "timeout"]).optional(),
+  status: z
+    .enum(["completed", "failed", "timeout", "async_launched"])
+    .optional(),
   prompt: z.string().optional(),
   agentId: z.string().optional(),
   content: z.array(ContentBlockSchema).optional(),
   totalDurationMs: z.number().optional(),
   totalTokens: z.number().optional(),
   totalToolUseCount: z.number().optional(),
+  isAsync: z.boolean().optional(),
+  description: z.string().optional(),
+  outputFile: z.string().optional(),
 });
 
 /**
@@ -98,7 +103,7 @@ const ImageFileSchema = z.object({
 });
 
 const ReadResultObjectSchema = z.object({
-  type: z.enum(["text", "image"]).optional(),
+  type: z.enum(["text", "image", "pdf"]).optional(),
   file: z.union([TextFileSchema, ImageFileSchema]).optional(),
 });
 
@@ -318,11 +323,13 @@ export const BashOutputResultSchema = withStringError(
 export type BashOutputResultValidated = z.infer<typeof BashOutputResultSchema>;
 
 const TaskOutputResultObjectSchema = z.object({
-  retrieval_status: z.enum(["completed", "timeout", "running"]).optional(),
+  retrieval_status: z
+    .enum(["completed", "success", "not_ready", "timeout", "running"])
+    .optional(),
   task: z
     .object({
       task_id: z.string().optional(),
-      task_type: z.enum(["local_bash", "agent"]).optional(),
+      task_type: z.enum(["local_bash", "local_agent", "agent"]).optional(),
       status: z.enum(["running", "completed", "failed"]).optional(),
       description: z.string().optional(),
       output: z.string().optional(),
@@ -356,6 +363,21 @@ export const KillShellResultSchema = withStringError(
 
 export type KillShellResultValidated = z.infer<typeof KillShellResultSchema>;
 
+const TaskStopResultObjectSchema = z.object({
+  message: z.string().optional(),
+  task_id: z.string().optional(),
+  task_type: z.string().optional(),
+  command: z.string().optional(),
+});
+
+/**
+ * TaskStop tool result schema
+ * Accepts either structured object OR string error message from SDK
+ */
+export const TaskStopResultSchema = withStringError(TaskStopResultObjectSchema);
+
+export type TaskStopResultValidated = z.infer<typeof TaskStopResultSchema>;
+
 const EnterPlanModeResultObjectSchema = z.object({
   message: z.string().optional(),
 });
@@ -374,7 +396,9 @@ export type EnterPlanModeResultValidated = z.infer<
 
 const ExitPlanModeResultObjectSchema = z.object({
   message: z.string().optional(),
-  plan: z.string().optional(),
+  plan: z.string().nullable().optional(),
+  isAgent: z.boolean().optional(),
+  filePath: z.string().optional(),
 });
 
 /**

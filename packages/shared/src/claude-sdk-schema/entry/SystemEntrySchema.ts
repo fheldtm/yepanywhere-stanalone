@@ -92,6 +92,15 @@ const StopHookSummarySystemEntrySchema = BaseEntrySchema.extend({
   hasOutput: z.boolean(),
 });
 
+// Bridge status system entry (remote control connection info)
+const BridgeStatusSystemEntrySchema = BaseEntrySchema.extend({
+  type: z.literal("system"),
+  subtype: z.literal("bridge_status"),
+  content: z.string(),
+  url: z.string().optional(),
+  isMeta: z.boolean().optional(),
+});
+
 export const SystemEntrySchema = z.union([
   RegularSystemEntrySchema,
   CompactBoundarySystemEntrySchema,
@@ -100,6 +109,7 @@ export const SystemEntrySchema = z.union([
   StatusSystemEntrySchema,
   ApiErrorSystemEntrySchema,
   StopHookSummarySystemEntrySchema,
+  BridgeStatusSystemEntrySchema,
 ]);
 
 export type SystemEntry = z.infer<typeof SystemEntrySchema>;

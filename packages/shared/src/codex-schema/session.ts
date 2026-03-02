@@ -329,7 +329,7 @@ export const CodexAgentReasoningEventSchema = z.object({
 export const CodexTokenCountEventSchema = z.object({
   type: z.literal("token_count"),
   info: CodexTokenUsageInfoSchema.nullable(),
-  rate_limits: CodexRateLimitsSchema.optional(),
+  rate_limits: CodexRateLimitsSchema.nullable().optional(),
 });
 
 /**
@@ -380,7 +380,7 @@ export const CodexTaskStartedEventSchema = z.object({
 export const CodexTaskCompleteEventSchema = z.object({
   type: z.literal("task_complete"),
   turn_id: z.string(),
-  last_agent_message: z.string(),
+  last_agent_message: z.string().nullable(),
 });
 
 /**

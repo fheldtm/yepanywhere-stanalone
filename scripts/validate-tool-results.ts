@@ -32,6 +32,7 @@ import {
   ReadResultSchema,
   TaskOutputResultSchema,
   TaskResultSchema,
+  TaskStopResultSchema,
   TodoWriteResultSchema,
   WebFetchResultSchema,
   WebSearchResultSchema,
@@ -54,6 +55,7 @@ const toolSchemas: Record<string, ZodType> = {
   BashOutput: BashOutputResultSchema,
   TaskOutput: TaskOutputResultSchema,
   KillShell: KillShellResultSchema,
+  TaskStop: TaskStopResultSchema,
   EnterPlanMode: EnterPlanModeResultSchema,
   ExitPlanMode: ExitPlanModeResultSchema,
 };
@@ -105,6 +107,10 @@ function extractToolName(entry: Record<string, unknown>): string | null {
 }
 
 function inferToolFromResult(result: unknown): string | null {
+  // Array results come from tools like Skill (browser automation, etc.)
+  // that return content block arrays rather than structured objects.
+  // Skip validation for these — they don't have a defined schema.
+  if (Array.isArray(result)) return null;
   if (typeof result !== "object" || result === null) return null;
   const r = result as Record<string, unknown>;
 
@@ -116,7 +122,11 @@ function inferToolFromResult(result: unknown): string | null {
   if ("filenames" in r && "durationMs" in r) return "Glob";
   if ("mode" in r && ("filenames" in r || "content" in r)) return "Grep";
   // Read/Write results have type: "text" or "image" with a file object
-  if ("type" in r && (r.type === "text" || r.type === "image") && "file" in r) {
+  if (
+    "type" in r &&
+    (r.type === "text" || r.type === "image" || r.type === "pdf") &&
+    "file" in r
+  ) {
     const file = r.file as Record<string, unknown>;
     if (file && typeof file === "object") {
       // Could be Read or Write - check for distinguishing fields
@@ -132,6 +142,8 @@ function inferToolFromResult(result: unknown): string | null {
   if ("status" in r && "agentId" in r) return "Task";
   if ("retrieval_status" in r && "task" in r) return "TaskOutput";
   if ("shell_id" in r && "message" in r) return "KillShell";
+  // TaskStop has task_id + message (but no shell_id)
+  if ("task_id" in r && "message" in r) return "TaskStop";
   // ExitPlanMode has a plan field with the plan content
   if ("plan" in r) return "ExitPlanMode";
   // EnterPlanMode has just a message field about entering plan mode
@@ -195,12 +207,22 @@ async function validateFile(
     // Apply filter if specified
     if (options.toolFilter && toolName !== options.toolFilter) continue;
 
-    // Initialize tool stats
-    if (toolName && !stats.byTool[toolName]) {
-      stats.byTool[toolName] = { valid: 0, invalid: 0, unknown: 0 };
-    }
-
+    // String results are valid for any tool (via withStringError wrapper)
+    // but we can't determine which tool they belong to — skip silently.
+    // Array results come from tools (Skill, browser automation) that return
+    // content block arrays — also skip since there's no schema to validate.
     if (!toolName) {
+      if (typeof toolUseResult === "string" || Array.isArray(toolUseResult)) {
+        stats.validResults++;
+        const label =
+          typeof toolUseResult === "string" ? "<string>" : "<array>";
+        if (!stats.byTool[label]) {
+          stats.byTool[label] = { valid: 0, invalid: 0, unknown: 0 };
+        }
+        stats.byTool[label].valid++;
+        continue;
+      }
+
       stats.unknownTools++;
       if (!stats.byTool["<unknown>"]) {
         stats.byTool["<unknown>"] = { valid: 0, invalid: 0, unknown: 0 };
@@ -217,6 +239,11 @@ async function validateFile(
         });
       }
       continue;
+    }
+
+    // Initialize tool stats
+    if (!stats.byTool[toolName]) {
+      stats.byTool[toolName] = { valid: 0, invalid: 0, unknown: 0 };
     }
 
     const schema = toolSchemas[toolName];
