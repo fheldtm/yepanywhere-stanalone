@@ -66,7 +66,7 @@ func (sh *SignalingHandler) HandleConnect(w http.ResponseWriter, r *http.Request
 	// Close existing session if any.
 	sh.closeSessionLocked()
 
-	session, err := NewPeerSession(sh.stunServers, sh.inputHandler.HandleMessage, nil)
+	session, err := NewPeerSession("standalone", sh.stunServers, sh.inputHandler.HandleMessage, nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("creating session: %v", err), http.StatusInternalServerError)
 		return

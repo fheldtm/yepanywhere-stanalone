@@ -55,7 +55,7 @@ func NewSessionManager(stunServers []string, sendMsg func(msg []byte), onIdle fu
 		sendMsg:     sendMsg,
 		pool:        NewResourcePool(),
 		onIdle:      onIdle,
-		idleTimeout: 30 * time.Second,
+		idleTimeout: 10 * time.Second,
 	}
 	// Start idle timer immediately (bridge starts with no sessions).
 	if onIdle != nil {
@@ -138,7 +138,7 @@ func (sm *SessionManager) StartSession(sessionID, emulatorID string, opts Sessio
 	onICE := func(c *stream.ICECandidateJSON) {
 		sm.sendICE(sessionID, c)
 	}
-	peer, err := stream.NewPeerSession(sm.stunServers, inputHandler.HandleMessage, onICE)
+	peer, err := stream.NewPeerSession(sessionID, sm.stunServers, inputHandler.HandleMessage, onICE)
 	if err != nil {
 		sm.pool.ReleaseFrameSource(emulatorID, maxWidth)
 		h264Enc.Close()

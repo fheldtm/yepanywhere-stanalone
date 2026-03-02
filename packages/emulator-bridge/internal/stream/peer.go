@@ -26,11 +26,13 @@ type PeerSession struct {
 	onInput     func(msg []byte)
 	closed      chan struct{}
 	connected   chan struct{} // closed when ICE reaches "connected" state
+	label       string       // session ID prefix for log messages
 }
 
 // NewPeerSession creates a PeerConnection with an h264 video track and a "control" DataChannel.
+// label is used as a prefix in log messages (typically the session ID).
 // onICE is called for each trickle ICE candidate (nil candidate means gathering complete).
-func NewPeerSession(stunServers []string, onInput func(msg []byte), onICE func(*ICECandidateJSON)) (*PeerSession, error) {
+func NewPeerSession(label string, stunServers []string, onInput func(msg []byte), onICE func(*ICECandidateJSON)) (*PeerSession, error) {
 	iceServers := []webrtc.ICEServer{}
 	if len(stunServers) > 0 {
 		iceServers = append(iceServers, webrtc.ICEServer{URLs: stunServers})
@@ -52,10 +54,24 @@ func NewPeerSession(stunServers []string, onInput func(msg []byte), onICE func(*
 		return nil, fmt.Errorf("creating video track: %w", err)
 	}
 
-	if _, err := pc.AddTrack(videoTrack); err != nil {
+	rtpSender, err := pc.AddTrack(videoTrack)
+	if err != nil {
 		pc.Close()
 		return nil, fmt.Errorf("adding video track: %w", err)
 	}
+
+	// Drain incoming RTCP packets. Pion requires this: RTCP packets are
+	// processed by interceptors (NACK, PLI, etc.) before being returned.
+	// Without reading, the RTCP buffer fills up and back-pressures the
+	// RTP write path, causing WriteSample to silently stall after a few seconds.
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			if _, _, rtcpErr := rtpSender.Read(buf); rtcpErr != nil {
+				return
+			}
+		}
+	}()
 
 	dc, err := pc.CreateDataChannel("control", nil)
 	if err != nil {
@@ -70,10 +86,19 @@ func NewPeerSession(stunServers []string, onInput func(msg []byte), onICE func(*
 		onInput:     onInput,
 		closed:      make(chan struct{}),
 		connected:   make(chan struct{}),
+		label:       label,
 	}
 
 	dc.OnOpen(func() {
-		log.Printf("DataChannel '%s' opened", dc.Label())
+		log.Printf("[peer %s] DataChannel '%s' opened", label, dc.Label())
+	})
+
+	dc.OnClose(func() {
+		log.Printf("[peer %s] DataChannel '%s' closed", label, dc.Label())
+	})
+
+	dc.OnError(func(err error) {
+		log.Printf("[peer %s] DataChannel '%s' error: %v", label, dc.Label(), err)
 	})
 
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
@@ -82,8 +107,12 @@ func NewPeerSession(stunServers []string, onInput func(msg []byte), onICE func(*
 		}
 	})
 
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		log.Printf("[peer %s] connectionState: %s", label, state.String())
+	})
+
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		log.Printf("ICE connection state: %s", state.String())
+		log.Printf("[peer %s] iceConnectionState: %s", label, state.String())
 		switch state {
 		case webrtc.ICEConnectionStateConnected, webrtc.ICEConnectionStateCompleted:
 			select {
@@ -193,6 +222,8 @@ func (ps *PeerSession) WriteVideoSample(data []byte, duration time.Duration) err
 
 // Close tears down the PeerConnection.
 func (ps *PeerSession) Close() error {
+	log.Printf("[peer %s] Close() called (iceState=%s, connState=%s)",
+		ps.label, ps.pc.ICEConnectionState().String(), ps.pc.ConnectionState().String())
 	select {
 	case <-ps.closed:
 	default:
