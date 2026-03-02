@@ -1,0 +1,41 @@
+# Android Device Server (Prototype)
+
+This package builds `yep-device-server.apk`, a tiny Android process launched via `app_process`.
+
+## Toolchain
+
+- JDK 17
+- Android Gradle Plugin 8.11.0
+- Gradle 8.14.3
+- compileSdk/targetSdk 36, minSdk 24
+
+## Build
+
+```bash
+cd packages/android-device-server
+./build-apk.sh
+```
+
+Output APK:
+
+`app/build/outputs/apk/release/yep-device-server.apk`
+
+## Manual Device Launch
+
+```bash
+adb -s <serial> push app/build/outputs/apk/release/yep-device-server.apk /data/local/tmp/yep-device-server.apk
+adb -s <serial> shell CLASSPATH=/data/local/tmp/yep-device-server.apk app_process /system/bin com.yepanywhere.DeviceServer
+adb -s <serial> forward tcp:27183 tcp:27183
+```
+
+## Wire Protocol
+
+- Handshake (device -> sidecar): `[width u16 LE][height u16 LE]`
+- Frame request (sidecar -> device): `[0x01]`
+- Frame response (device -> sidecar): `[0x02][len u32 LE][JPEG bytes]`
+- Control command (sidecar -> device): `[0x03][len u32 LE][JSON bytes]`
+
+Control JSON examples:
+
+- `{"cmd":"touch","touches":[{"x":0.5,"y":0.3,"pressure":1.0}]}`
+- `{"cmd":"key","key":"back"}`

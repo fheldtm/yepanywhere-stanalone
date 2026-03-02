@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,13 +18,21 @@ import (
 )
 
 const (
-	defaultAndroidBridgePort = 27183
-	defaultADBPath           = "adb"
+	defaultAndroidBridgePort      = 27183
+	defaultADBPath                = "adb"
+	defaultAndroidServerRemoteAPK = "/data/local/tmp/yep-device-server.apk"
+	defaultAndroidServerMainClass = "com.yepanywhere.DeviceServer"
+	androidServerAPKEnvVar        = "ANDROID_DEVICE_SERVER_APK"
 )
 
 // AndroidDevice communicates with the on-device server through an adb-forwarded TCP socket.
 type AndroidDevice struct {
-	serial string
+	serial  string
+	adbPath string
+
+	forwardSpec  string
+	serverCmd    *exec.Cmd
+	serverCancel context.CancelFunc
 
 	rw      io.ReadWriteCloser
 	reader  io.Reader
@@ -37,7 +47,8 @@ type AndroidDevice struct {
 	closeErr  error
 }
 
-// NewAndroidDevice sets up adb forwarding and connects to the local bridge socket.
+// NewAndroidDevice pushes/starts the on-device server, sets up adb forwarding,
+// and connects to the local forwarded socket.
 func NewAndroidDevice(serial, adbPath string) (*AndroidDevice, error) {
 	serial = strings.TrimSpace(serial)
 	if serial == "" {
@@ -47,18 +58,150 @@ func NewAndroidDevice(serial, adbPath string) (*AndroidDevice, error) {
 		adbPath = defaultADBPath
 	}
 
-	forwardArg := fmt.Sprintf("tcp:%d", defaultAndroidBridgePort)
-	forwardCmd := exec.Command(adbPath, "-s", serial, "forward", forwardArg, forwardArg)
-	if out, err := forwardCmd.CombinedOutput(); err != nil {
+	apkPath, err := resolveAndroidServerAPKPath()
+	if err != nil {
+		return nil, err
+	}
+
+	if out, err := exec.Command(adbPath, "-s", serial, "push", apkPath, defaultAndroidServerRemoteAPK).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("adb push server apk for %s: %w (%s)", serial, err, strings.TrimSpace(string(out)))
+	}
+
+	// Best-effort cleanup from previous runs.
+	_, _ = exec.Command(adbPath, "-s", serial, "shell", "pkill -f "+defaultAndroidServerMainClass).CombinedOutput()
+
+	serverCmd, serverCancel, err := startAndroidServer(adbPath, serial)
+	if err != nil {
+		return nil, err
+	}
+
+	forwardSpec := fmt.Sprintf("tcp:%d", defaultAndroidBridgePort)
+	_, _ = exec.Command(adbPath, "-s", serial, "forward", "--remove", forwardSpec).CombinedOutput()
+	if out, err := exec.Command(adbPath, "-s", serial, "forward", forwardSpec, forwardSpec).CombinedOutput(); err != nil {
+		serverCancel()
+		_ = waitForProcessExit(serverCmd, 1*time.Second)
 		return nil, fmt.Errorf("adb forward for %s: %w (%s)", serial, err, strings.TrimSpace(string(out)))
 	}
 
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", defaultAndroidBridgePort), 3*time.Second)
+	conn, err := dialForwardedAndroidSocket(8 * time.Second)
 	if err != nil {
+		_ = exec.Command(adbPath, "-s", serial, "forward", "--remove", forwardSpec).Run()
+		serverCancel()
+		_ = waitForProcessExit(serverCmd, 1*time.Second)
 		return nil, fmt.Errorf("connect to adb-forwarded socket for %s: %w", serial, err)
 	}
 
-	return NewAndroidDeviceWithTransport(serial, conn, nil)
+	d := &AndroidDevice{
+		serial:       serial,
+		adbPath:      adbPath,
+		forwardSpec:  forwardSpec,
+		serverCmd:    serverCmd,
+		serverCancel: serverCancel,
+		rw:           conn,
+		reader:       conn,
+		writer:       conn,
+	}
+	if err := d.readHandshake(); err != nil {
+		_ = d.Close()
+		return nil, err
+	}
+	return d, nil
+}
+
+func startAndroidServer(adbPath, serial string) (*exec.Cmd, context.CancelFunc, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	shellCmd := fmt.Sprintf("CLASSPATH=%s app_process /system/bin %s", defaultAndroidServerRemoteAPK, defaultAndroidServerMainClass)
+	cmd := exec.CommandContext(ctx, adbPath, "-s", serial, "shell", shellCmd)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		cancel()
+		return nil, nil, fmt.Errorf("start android device server for %s: %w", serial, err)
+	}
+	return cmd, cancel, nil
+}
+
+func dialForwardedAndroidSocket(timeout time.Duration) (net.Conn, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", defaultAndroidBridgePort), 750*time.Millisecond)
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+		time.Sleep(200 * time.Millisecond)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("dial timeout")
+	}
+	return nil, lastErr
+}
+
+func resolveAndroidServerAPKPath() (string, error) {
+	if envPath := strings.TrimSpace(os.Getenv(androidServerAPKEnvVar)); envPath != "" {
+		if _, err := os.Stat(envPath); err != nil {
+			return "", fmt.Errorf("%s is set but file does not exist: %s", androidServerAPKEnvVar, envPath)
+		}
+		return envPath, nil
+	}
+
+	candidates := make([]string, 0, 6)
+
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "yep-device-server.apk"),
+			filepath.Join(exeDir, "..", "android-device-server", "app", "build", "outputs", "apk", "release", "yep-device-server.apk"),
+			filepath.Join(exeDir, "..", "..", "android-device-server", "app", "build", "outputs", "apk", "release", "yep-device-server.apk"),
+		)
+	}
+
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(cwd, "packages", "android-device-server", "app", "build", "outputs", "apk", "release", "yep-device-server.apk"),
+			filepath.Join(cwd, "app", "build", "outputs", "apk", "release", "yep-device-server.apk"),
+		)
+	}
+
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".yep-anywhere", "bin", "yep-device-server.apk"))
+	}
+
+	for _, p := range candidates {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"android device server apk not found; set %s or build packages/android-device-server/app/build/outputs/apk/release/yep-device-server.apk",
+		androidServerAPKEnvVar,
+	)
+}
+
+func waitForProcessExit(cmd *exec.Cmd, timeout time.Duration) error {
+	if cmd == nil {
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		<-done
+		return nil
+	}
 }
 
 // NewAndroidDeviceWithTransport creates an AndroidDevice over an existing transport.
@@ -181,16 +324,35 @@ func (d *AndroidDevice) ScreenSize() (width, height int32) {
 // Close shuts down the device transport.
 func (d *AndroidDevice) Close() error {
 	d.closeOnce.Do(func() {
-		var err error
-		if d.rw != nil {
-			err = d.rw.Close()
-		}
-		if d.closeFn != nil {
-			if closeErr := d.closeFn(); err == nil {
-				err = closeErr
+		var firstErr error
+		setErr := func(err error) {
+			if err != nil && firstErr == nil {
+				firstErr = err
 			}
 		}
-		d.closeErr = err
+
+		if d.rw != nil {
+			setErr(d.rw.Close())
+		}
+
+		if d.serverCancel != nil {
+			d.serverCancel()
+		}
+		if d.serverCmd != nil {
+			_ = waitForProcessExit(d.serverCmd, 1500*time.Millisecond)
+		}
+
+		if d.adbPath != "" && d.serial != "" && d.forwardSpec != "" {
+			if _, err := exec.Command(d.adbPath, "-s", d.serial, "forward", "--remove", d.forwardSpec).CombinedOutput(); err != nil {
+				setErr(err)
+			}
+		}
+
+		if d.closeFn != nil {
+			setErr(d.closeFn())
+		}
+
+		d.closeErr = firstErr
 	})
 	return d.closeErr
 }
