@@ -21,8 +21,12 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * DeviceServer runs under app_process (shell user) and serves framed screenshot/control traffic.
@@ -40,6 +44,9 @@ public final class DeviceServer {
     private static final byte TYPE_CONTROL = 0x03;
 
     private static final int JPEG_QUALITY = 70;
+    private static final int TAP_SLOP_PX = 24;
+    private static final int MIN_SWIPE_DURATION_MS = 80;
+    private static final int MAX_SWIPE_DURATION_MS = 1200;
 
     private DeviceServer() {}
 
@@ -64,6 +71,7 @@ public final class DeviceServer {
 
     private static void handleClient(Socket client) throws IOException {
         client.setTcpNoDelay(true);
+        TouchTracker touchTracker = new TouchTracker();
 
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(client.getInputStream()));
              BufferedOutputStream out = new BufferedOutputStream(client.getOutputStream())) {
@@ -90,7 +98,7 @@ public final class DeviceServer {
                     }
                     byte[] payload = new byte[len];
                     in.readFully(payload);
-                    handleControl(payload, frame.width, frame.height);
+                    handleControl(payload, frame.width, frame.height, touchTracker);
                     continue;
                 }
 
@@ -122,14 +130,14 @@ public final class DeviceServer {
         return ByteBuffer.wrap(lenBytes).order(ByteOrder.LITTLE_ENDIAN).getInt();
     }
 
-    private static void handleControl(byte[] payload, int width, int height) {
+    private static void handleControl(byte[] payload, int width, int height, TouchTracker touchTracker) {
         String raw = new String(payload, StandardCharsets.UTF_8);
         try {
             JSONObject obj = new JSONObject(raw);
             String cmd = obj.optString("cmd", "");
             switch (cmd) {
                 case "touch":
-                    handleTouch(obj, width, height);
+                    handleTouch(obj, width, height, touchTracker);
                     break;
                 case "key":
                     handleKey(obj);
@@ -142,7 +150,7 @@ public final class DeviceServer {
         }
     }
 
-    private static void handleTouch(JSONObject obj, int width, int height) {
+    private static void handleTouch(JSONObject obj, int width, int height, TouchTracker touchTracker) {
         JSONArray touches = obj.optJSONArray("touches");
         if (touches == null || touches.length() == 0) {
             return;
@@ -153,17 +161,61 @@ public final class DeviceServer {
             return;
         }
 
+        int touchId = t.optInt("id", 0);
+        double pressure = t.optDouble("pressure", 0.0);
         double nx = t.optDouble("x", 0.0);
         double ny = t.optDouble("y", 0.0);
-
+        long nowMs = System.currentTimeMillis();
         int x = clamp((int) Math.round(nx * width), 0, Math.max(0, width - 1));
         int y = clamp((int) Math.round(ny * height), 0, Math.max(0, height - 1));
 
-        try {
-            runCommand(new String[]{"input", "tap", String.valueOf(x), String.valueOf(y)});
-        } catch (IOException e) {
-            logError("touch command failed", e);
+        // Touch release packet: synthesize tap (short/stationary) or swipe.
+        if (pressure <= 0.0) {
+            TouchState state = touchTracker.activeTouches.remove(touchId);
+            touchTracker.activeIds.remove(touchId);
+            if (state == null) {
+                return;
+            }
+
+            int endX = x;
+            int endY = y;
+            int dx = endX - state.startX;
+            int dy = endY - state.startY;
+            int distSq = (dx * dx) + (dy * dy);
+            int slopSq = TAP_SLOP_PX * TAP_SLOP_PX;
+
+            try {
+                if (distSq <= slopSq) {
+                    runCommand(new String[]{"input", "tap", String.valueOf(state.startX), String.valueOf(state.startY)});
+                } else {
+                    int durationMs = clamp((int) (nowMs - state.startTimeMs), MIN_SWIPE_DURATION_MS, MAX_SWIPE_DURATION_MS);
+                    runCommand(new String[]{
+                        "input",
+                        "swipe",
+                        String.valueOf(state.startX),
+                        String.valueOf(state.startY),
+                        String.valueOf(endX),
+                        String.valueOf(endY),
+                        String.valueOf(durationMs),
+                    });
+                }
+            } catch (IOException e) {
+                logError("touch command failed", e);
+            }
+            return;
         }
+
+        TouchState existing = touchTracker.activeTouches.get(touchId);
+        if (existing != null) {
+            existing.lastX = x;
+            existing.lastY = y;
+            existing.lastTimeMs = nowMs;
+            return;
+        }
+
+        // Track touch-down until release, where we classify tap vs swipe.
+        touchTracker.activeIds.add(touchId);
+        touchTracker.activeTouches.put(touchId, new TouchState(x, y, nowMs));
     }
 
     private static void handleKey(JSONObject obj) {
@@ -184,9 +236,16 @@ public final class DeviceServer {
         String normalized = key.trim().toLowerCase(Locale.US);
         switch (normalized) {
             case "back":
+            case "goback":
                 return "KEYCODE_BACK";
             case "home":
+            case "gohome":
                 return "KEYCODE_HOME";
+            case "appswitch":
+            case "app_switch":
+            case "recents":
+            case "overview":
+                return "KEYCODE_APP_SWITCH";
             case "menu":
                 return "KEYCODE_MENU";
             case "power":
@@ -326,6 +385,29 @@ public final class DeviceServer {
             this.jpeg = jpeg;
             this.width = width;
             this.height = height;
+        }
+    }
+
+    private static final class TouchTracker {
+        final Set<Integer> activeIds = new HashSet<>();
+        final Map<Integer, TouchState> activeTouches = new HashMap<>();
+    }
+
+    private static final class TouchState {
+        final int startX;
+        final int startY;
+        final long startTimeMs;
+        int lastX;
+        int lastY;
+        long lastTimeMs;
+
+        TouchState(int startX, int startY, long startTimeMs) {
+            this.startX = startX;
+            this.startY = startY;
+            this.startTimeMs = startTimeMs;
+            this.lastX = startX;
+            this.lastY = startY;
+            this.lastTimeMs = startTimeMs;
         }
     }
 }

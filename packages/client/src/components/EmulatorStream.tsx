@@ -49,6 +49,35 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
+function mapTouchToNormalized(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+): { x: number; y: number } | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const x = (clientX - rect.left) / rect.width;
+  const y = (clientY - rect.top) / rect.height;
+
+  // Ignore touches outside the rendered video area.
+  if (x < 0 || x > 1 || y < 0 || y > 1) return null;
+
+  return { x: clamp01(x), y: clamp01(y) };
+}
+
+function mapReleaseToNormalized(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+): { x: number; y: number } | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const x = (clientX - rect.left) / rect.width;
+  const y = (clientY - rect.top) / rect.height;
+  // For release events, clamp instead of dropping so the server can always
+  // clear touch state even when the finger ends outside the video bounds.
+  return { x: clamp01(x), y: clamp01(y) };
+}
+
 /**
  * Video element for emulator stream with touch and mouse event capture.
  * Coordinates are normalized to 0.0-1.0, accounting for object-fit letterboxing.
@@ -254,12 +283,22 @@ export function EmulatorStream({
     ) => {
       if (!canSend() || !dataChannel) return;
       const rect = getVideoRect(video);
-      const mapped = touches.map((t) => ({
-        x: clamp01((t.clientX - rect.left) / rect.width),
-        y: clamp01((t.clientY - rect.top) / rect.height),
-        pressure: t.pressure,
-        id: t.id,
-      }));
+      const mapped = touches
+        .map((t) => {
+          const normalized =
+            t.pressure <= 0
+              ? mapReleaseToNormalized(t.clientX, t.clientY, rect)
+              : mapTouchToNormalized(t.clientX, t.clientY, rect);
+          if (!normalized) return null;
+          return {
+            x: normalized.x,
+            y: normalized.y,
+            pressure: t.pressure,
+            id: t.id,
+          };
+        })
+        .filter((t): t is NonNullable<typeof t> => t !== null);
+      if (mapped.length === 0) return;
       dataChannel.send(JSON.stringify({ type: "touch", touches: mapped }));
     },
     [canSend, dataChannel],
