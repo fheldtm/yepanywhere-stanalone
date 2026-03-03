@@ -137,22 +137,14 @@ func (sm *SessionManager) StartSession(sessionID, deviceID, deviceType string, o
 	)
 
 	// Try Android hardware stream path first; fall back to JPEG+x264 on any failure.
-	if strings.EqualFold(deviceType, "android") {
-		if sc, ok := client.(device.StreamCapable); ok {
-			streamOpts := device.StreamOptions{
-				Width:      targetW,
-				Height:     targetH,
-				FPS:        maxFPS,
-				BitrateBps: estimateAndroidBitrate(targetW, targetH, maxFPS),
-			}
-			if ns, streamErr := sc.StartStream(context.Background(), streamOpts); streamErr == nil {
-				nalSource = ns
-				streamCap = sc
-				log.Printf("[session %s] using on-device MediaCodec stream (%dx%d @ %dfps)", sessionID, targetW, targetH, maxFPS)
-			} else {
-				log.Printf("[session %s] stream_start unavailable, falling back to screenshot path: %v", sessionID, streamErr)
-			}
+	if ns, sc, streamErr := maybeStartAndroidStream(client, deviceType, targetW, targetH, maxFPS); streamErr == nil {
+		nalSource = ns
+		streamCap = sc
+		if ns != nil {
+			log.Printf("[session %s] using on-device MediaCodec stream (%dx%d @ %dfps)", sessionID, targetW, targetH, maxFPS)
 		}
+	} else {
+		log.Printf("[session %s] stream_start unavailable, falling back to screenshot path: %v", sessionID, streamErr)
 	}
 
 	if nalSource == nil {
@@ -603,6 +595,33 @@ func (sm *SessionManager) runNALPipeline(sess *streamSession) {
 			}
 		}
 	}
+}
+
+func maybeStartAndroidStream(
+	client device.Device,
+	deviceType string,
+	targetW int,
+	targetH int,
+	maxFPS int,
+) (*device.NalSource, device.StreamCapable, error) {
+	if !strings.EqualFold(deviceType, "android") {
+		return nil, nil, nil
+	}
+	sc, ok := client.(device.StreamCapable)
+	if !ok {
+		return nil, nil, nil
+	}
+	streamOpts := device.StreamOptions{
+		Width:      targetW,
+		Height:     targetH,
+		FPS:        maxFPS,
+		BitrateBps: estimateAndroidBitrate(targetW, targetH, maxFPS),
+	}
+	nalSource, err := sc.StartStream(context.Background(), streamOpts)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nalSource, sc, nil
 }
 
 func estimateAndroidBitrate(width, height, fps int) int {

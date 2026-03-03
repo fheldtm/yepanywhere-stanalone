@@ -42,6 +42,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * DeviceServer runs under app_process (shell user) and serves framed screenshot/control traffic.
@@ -70,6 +72,7 @@ public final class DeviceServer {
     private static final int MAX_CAPTURE_WIDTH = 4096;
     private static final int MAX_STREAM_WIDTH = 4096;
     private static final int MAX_STREAM_HEIGHT = 4096;
+    private static final Pattern DISPLAY_SIZE_PATTERN = Pattern.compile("(\\d+)\\s*x\\s*(\\d+)");
     private static volatile FrameCapturer frameCapturer = createFrameCapturer();
     private static volatile int captureMaxWidth = 0; // 0 => native width
 
@@ -1093,6 +1096,10 @@ public final class DeviceServer {
     }
 
     private static final class MediaCodecStreamer {
+        private static final int MAX_START_ATTEMPTS = 4; // initial + up to 3 downgrade retries
+        private static final long DISPLAY_POLL_INTERVAL_MS = 1000;
+        private static final int[] FALLBACK_MAX_SIDES = new int[]{2560, 1920, 1600, 1280, 1024, 800, 640, 540, 480};
+
         private final OutputStream out;
         private final Object writeLock;
         private final Object stateLock = new Object();
@@ -1103,27 +1110,35 @@ public final class DeviceServer {
         private Surface inputSurface;
         private Object virtualDisplayToken;
         private Method destroyDisplayMethod;
+        private Object virtualDisplayObject;
+        private Method releaseVirtualDisplayMethod;
         private int streamWidth;
         private int streamHeight;
         private int streamBitrate;
         private int streamFps;
+        private int requestedWidth;
+        private int requestedHeight;
+        private int sourceScreenWidth;
+        private int sourceScreenHeight;
 
         MediaCodecStreamer(OutputStream out, Object writeLock) {
             this.out = out;
             this.writeLock = writeLock;
         }
 
-        void start(JSONObject obj, int screenWidth, int screenHeight) {
-            int width = clamp(obj.optInt("width", screenWidth), 64, MAX_STREAM_WIDTH);
-            int height = clamp(obj.optInt("height", screenHeight), 64, MAX_STREAM_HEIGHT);
+        void start(JSONObject obj, int fallbackScreenWidth, int fallbackScreenHeight) {
+            int width = clamp(obj.optInt("width", fallbackScreenWidth), 64, MAX_STREAM_WIDTH);
+            int height = clamp(obj.optInt("height", fallbackScreenHeight), 64, MAX_STREAM_HEIGHT);
             int bitrate = clamp(obj.optInt("bitrate", 2_000_000), 128_000, 50_000_000);
             int fps = clamp(obj.optInt("fps", 30), 1, 120);
 
             synchronized (stateLock) {
                 stopLocked();
                 try {
-                    configureEncoder(width, height, bitrate, fps);
-                    attachVirtualDisplay(screenWidth, screenHeight, width, height);
+                    requestedWidth = width;
+                    requestedHeight = height;
+                    int[] displaySize = readDisplaySizeOrFallback(fallbackScreenWidth, fallbackScreenHeight);
+                    startPipelineWithRetriesLocked(displaySize[0], displaySize[1], bitrate, fps);
                     running = true;
                     outputThread = new Thread(this::runOutputLoop, "yep-stream-encoder");
                     outputThread.setDaemon(true);
@@ -1203,62 +1218,192 @@ public final class DeviceServer {
         }
 
         private void runOutputLoop() {
-            MediaCodec localCodec;
-            synchronized (stateLock) {
-                localCodec = codec;
-            }
-            if (localCodec == null) {
-                return;
-            }
-
-            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            while (running) {
-                int index;
-                try {
-                    index = localCodec.dequeueOutputBuffer(info, 100_000);
-                } catch (Throwable t) {
-                    logError("encoder dequeue failed", t);
-                    return;
-                }
-
-                if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    continue;
-                }
-                if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    continue;
-                }
-                if (index < 0) {
-                    continue;
-                }
-
-                try {
-                    ByteBuffer buf = localCodec.getOutputBuffer(index);
-                    if (buf != null && info.size > 0) {
-                        ByteBuffer dup = buf.duplicate();
-                        dup.position(info.offset);
-                        dup.limit(info.offset + info.size);
-                        byte[] payload = new byte[info.size];
-                        dup.get(payload);
-
-                        byte flags = 0;
-                        if ((info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) {
-                            flags |= 0x01;
-                        }
-                        if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-                            flags |= 0x02;
-                        }
-                        writeStreamNal(out, writeLock, flags, info.presentationTimeUs, payload);
+            for (;;) {
+                MediaCodec localCodec;
+                int localScreenW;
+                int localScreenH;
+                synchronized (stateLock) {
+                    if (!running || codec == null) {
+                        return;
                     }
-                } catch (Throwable t) {
-                    logError("write stream NAL failed", t);
-                    return;
-                } finally {
+                    localCodec = codec;
+                    localScreenW = sourceScreenWidth;
+                    localScreenH = sourceScreenHeight;
+                }
+
+                MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+                long nextDisplayPollAt = System.currentTimeMillis() + DISPLAY_POLL_INTERVAL_MS;
+
+                for (;;) {
+                    synchronized (stateLock) {
+                        if (!running) {
+                            return;
+                        }
+                        if (codec != localCodec) {
+                            // Stream was restarted.
+                            break;
+                        }
+                    }
+
+                    int index;
                     try {
-                        localCodec.releaseOutputBuffer(index, false);
-                    } catch (Throwable ignored) {
+                        index = localCodec.dequeueOutputBuffer(info, 100_000);
+                    } catch (Throwable t) {
+                        logError("encoder dequeue failed", t);
+                        return;
+                    }
+
+                    if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                        // no-op
+                    } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                        // no-op
+                    } else if (index >= 0) {
+                        try {
+                            ByteBuffer buf = localCodec.getOutputBuffer(index);
+                            if (buf != null && info.size > 0) {
+                                ByteBuffer dup = buf.duplicate();
+                                dup.position(info.offset);
+                                dup.limit(info.offset + info.size);
+                                byte[] payload = new byte[info.size];
+                                dup.get(payload);
+
+                                byte flags = 0;
+                                if ((info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0) {
+                                    flags |= 0x01;
+                                }
+                                if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+                                    flags |= 0x02;
+                                }
+                                writeStreamNal(out, writeLock, flags, info.presentationTimeUs, payload);
+                            }
+                        } catch (Throwable t) {
+                            logError("write stream NAL failed", t);
+                            return;
+                        } finally {
+                            try {
+                                localCodec.releaseOutputBuffer(index, false);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                    }
+
+                    long now = System.currentTimeMillis();
+                    if (now >= nextDisplayPollAt) {
+                        nextDisplayPollAt = now + DISPLAY_POLL_INTERVAL_MS;
+                        int[] size = readDisplaySizeOrFallback(localScreenW, localScreenH);
+                        if (size[0] != localScreenW || size[1] != localScreenH) {
+                            if (!restartForDisplayChange(size[0], size[1])) {
+                                return;
+                            }
+                            break;
+                        }
                     }
                 }
             }
+        }
+
+        private boolean restartForDisplayChange(int newScreenW, int newScreenH) {
+            synchronized (stateLock) {
+                if (!running) {
+                    return false;
+                }
+                log("display size changed " + sourceScreenWidth + "x" + sourceScreenHeight +
+                    " -> " + newScreenW + "x" + newScreenH + ", restarting encoder");
+                try {
+                    releasePipelineLocked();
+                    startPipelineWithRetriesLocked(newScreenW, newScreenH, streamBitrate, streamFps);
+                    return true;
+                } catch (Throwable t) {
+                    running = false;
+                    logError("stream restart failed", t);
+                    return false;
+                }
+            }
+        }
+
+        private void startPipelineWithRetriesLocked(int screenWidth, int screenHeight, int bitrate, int fps) throws Exception {
+            List<int[]> candidates = buildResolutionCandidates(screenWidth, screenHeight, requestedWidth, requestedHeight);
+            Throwable lastErr = null;
+            int attempts = 0;
+            for (int[] size : candidates) {
+                if (attempts >= MAX_START_ATTEMPTS) {
+                    break;
+                }
+                attempts++;
+                int width = size[0];
+                int height = size[1];
+                try {
+                    configureEncoder(width, height, bitrate, fps);
+                    attachVirtualDisplay(screenWidth, screenHeight, width, height);
+                    sourceScreenWidth = screenWidth;
+                    sourceScreenHeight = screenHeight;
+                    return;
+                } catch (Throwable t) {
+                    lastErr = t;
+                    log("stream init attempt " + attempts + " failed at " + width + "x" + height +
+                        ": " + t.getClass().getSimpleName() + " " + t.getMessage());
+                    releasePipelineLocked();
+                }
+            }
+            if (lastErr instanceof Exception) {
+                throw (Exception) lastErr;
+            }
+            throw new IOException("stream init failed after retries");
+        }
+
+        private List<int[]> buildResolutionCandidates(int screenWidth, int screenHeight, int reqWidth, int reqHeight) {
+            int srcW = Math.max(1, screenWidth);
+            int srcH = Math.max(1, screenHeight);
+            int requestedLong = Math.max(reqWidth, reqHeight);
+            int requestedShort = Math.min(reqWidth, reqHeight);
+
+            int boundsW = srcW >= srcH ? requestedLong : requestedShort;
+            int boundsH = srcW >= srcH ? requestedShort : requestedLong;
+            int[] initial = fitInsideBounds(srcW, srcH, boundsW, boundsH);
+            int initialMaxSide = Math.max(initial[0], initial[1]);
+
+            List<int[]> out = new ArrayList<>();
+            Set<String> seen = new HashSet<>();
+            addCandidate(out, seen, initial[0], initial[1]);
+
+            for (int side : FALLBACK_MAX_SIDES) {
+                if (side >= initialMaxSide) {
+                    continue;
+                }
+                double scale = side / (double) initialMaxSide;
+                int w = normalizeDimension((int) Math.floor(initial[0] * scale), MAX_STREAM_WIDTH);
+                int h = normalizeDimension((int) Math.floor(initial[1] * scale), MAX_STREAM_HEIGHT);
+                addCandidate(out, seen, w, h);
+            }
+            return out;
+        }
+
+        private void addCandidate(List<int[]> out, Set<String> seen, int width, int height) {
+            int w = normalizeDimension(width, MAX_STREAM_WIDTH);
+            int h = normalizeDimension(height, MAX_STREAM_HEIGHT);
+            String key = w + "x" + h;
+            if (seen.add(key)) {
+                out.add(new int[]{w, h});
+            }
+        }
+
+        private int[] fitInsideBounds(int srcW, int srcH, int maxW, int maxH) {
+            int safeMaxW = Math.max(64, Math.min(MAX_STREAM_WIDTH, maxW));
+            int safeMaxH = Math.max(64, Math.min(MAX_STREAM_HEIGHT, maxH));
+            double scaleW = safeMaxW / (double) Math.max(1, srcW);
+            double scaleH = safeMaxH / (double) Math.max(1, srcH);
+            double scale = Math.min(1.0, Math.min(scaleW, scaleH));
+            int outW = normalizeDimension((int) Math.floor(srcW * scale), MAX_STREAM_WIDTH);
+            int outH = normalizeDimension((int) Math.floor(srcH * scale), MAX_STREAM_HEIGHT);
+            return new int[]{outW, outH};
+        }
+
+        private int normalizeDimension(int value, int max) {
+            int clamped = clamp(value, 64, max);
+            if ((clamped & 1) == 1) {
+                clamped = Math.max(64, clamped - 1);
+            }
+            return clamped;
         }
 
         private void configureEncoder(int width, int height, int bitrate, int fps) throws IOException {
@@ -1289,6 +1434,60 @@ public final class DeviceServer {
         }
 
         private void attachVirtualDisplay(int screenWidth, int screenHeight, int width, int height) throws Exception {
+            Throwable displayManagerError = null;
+            try {
+                attachVirtualDisplayViaDisplayManager(width, height);
+                return;
+            } catch (Throwable t) {
+                displayManagerError = t;
+                log("DisplayManager createVirtualDisplay unavailable, falling back to SurfaceControl: " +
+                    t.getClass().getSimpleName() + " " + t.getMessage());
+            }
+
+            try {
+                attachVirtualDisplayViaSurfaceControl(screenWidth, screenHeight, width, height);
+            } catch (Throwable t) {
+                if (displayManagerError != null) {
+                    throw new IOException(
+                        "virtual display setup failed (DisplayManager + SurfaceControl): " +
+                            displayManagerError.getClass().getSimpleName() + " / " + t.getClass().getSimpleName(),
+                        t
+                    );
+                }
+                throw t;
+            }
+        }
+
+        private void attachVirtualDisplayViaDisplayManager(int width, int height) throws Exception {
+            Class<?> displayManagerClass = Class.forName("android.hardware.display.DisplayManager");
+            Method createVirtualDisplay = findMethodOptional(
+                displayManagerClass,
+                "createVirtualDisplay",
+                String.class,
+                int.class,
+                int.class,
+                int.class,
+                Surface.class
+            );
+            if (createVirtualDisplay == null || !Modifier.isStatic(createVirtualDisplay.getModifiers())) {
+                throw new NoSuchMethodException("DisplayManager.createVirtualDisplay(name,w,h,displayId,surface)");
+            }
+            Object vd = createVirtualDisplay.invoke(null, "yep-stream", width, height, 0, inputSurface);
+            if (vd == null) {
+                throw new IOException("DisplayManager.createVirtualDisplay returned null");
+            }
+            Method release = findMethodOptionalByArity(vd.getClass(), "release", 0);
+            if (release == null) {
+                throw new NoSuchMethodException("VirtualDisplay.release()");
+            }
+
+            virtualDisplayObject = vd;
+            releaseVirtualDisplayMethod = release;
+            virtualDisplayToken = null;
+            destroyDisplayMethod = null;
+        }
+
+        private void attachVirtualDisplayViaSurfaceControl(int screenWidth, int screenHeight, int width, int height) throws Exception {
             Class<?> surfaceControlClass = Class.forName("android.view.SurfaceControl");
             Method createDisplay = findMethodOptional(surfaceControlClass, "createDisplay", String.class, boolean.class);
             Method openTransaction = findMethodOptionalByArity(surfaceControlClass, "openTransaction", 0);
@@ -1328,6 +1527,8 @@ public final class DeviceServer {
 
             virtualDisplayToken = token;
             destroyDisplayMethod = destroyDisplay;
+            virtualDisplayObject = null;
+            releaseVirtualDisplayMethod = null;
 
             // Best effort: touch physical-display token so failures surface early on new Android versions.
             try {
@@ -1349,6 +1550,11 @@ public final class DeviceServer {
                 }
             }
 
+            outputThread = null;
+            releasePipelineLocked();
+        }
+
+        private void releasePipelineLocked() {
             if (codec != null) {
                 try {
                     codec.signalEndOfInputStream();
@@ -1372,6 +1578,15 @@ public final class DeviceServer {
                 }
                 inputSurface = null;
             }
+
+            if (virtualDisplayObject != null && releaseVirtualDisplayMethod != null) {
+                try {
+                    releaseVirtualDisplayMethod.invoke(virtualDisplayObject);
+                } catch (Throwable ignored) {
+                }
+            }
+            virtualDisplayObject = null;
+            releaseVirtualDisplayMethod = null;
 
             if (virtualDisplayToken != null && destroyDisplayMethod != null) {
                 try {
@@ -1434,6 +1649,25 @@ public final class DeviceServer {
             }
             out.write(buf, 0, n);
         }
+    }
+
+    private static int[] readDisplaySizeOrFallback(int fallbackWidth, int fallbackHeight) {
+        int width = Math.max(1, fallbackWidth);
+        int height = Math.max(1, fallbackHeight);
+        try {
+            byte[] output = runCommand(new String[]{"wm", "size"});
+            String raw = new String(output, StandardCharsets.UTF_8);
+            Matcher matcher = DISPLAY_SIZE_PATTERN.matcher(raw);
+            if (matcher.find()) {
+                int parsedW = Integer.parseInt(matcher.group(1));
+                int parsedH = Integer.parseInt(matcher.group(2));
+                if (parsedW > 0 && parsedH > 0) {
+                    return new int[]{parsedW, parsedH};
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return new int[]{width, height};
     }
 
     private static int clamp(int value, int min, int max) {

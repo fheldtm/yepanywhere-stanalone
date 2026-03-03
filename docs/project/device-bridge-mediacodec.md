@@ -360,9 +360,10 @@ Each phase/slice must be gated by tests before landing.
 - Added Android stream controls and NAL source path in `device-bridge`
 - Added automatic fallback: stream startup timeout/error returns to screenshot polling
 - Kept legacy API behavior intact (`GetFrame` path unchanged when stream mode is unavailable)
-
-Known gap in this slice:
-- APK streaming currently prioritizes `SurfaceControl.createDisplay()` path; broader DisplayManager two-tier fallback remains follow-up hardening.
+- APK stream startup now tries `DisplayManager.createVirtualDisplay()` first, then falls back to `SurfaceControl.createDisplay()`
+- Added startup resolution downgrade retries (initial + up to 3 smaller attempts)
+- Added display-size change detection with automatic encoder/display pipeline restart
+- Added `internal/ipc` bridge gate tests covering stream-capable start path vs fallback path
 
 ### Phase 3 — Adaptive quality
 
