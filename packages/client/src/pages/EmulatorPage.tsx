@@ -254,6 +254,7 @@ function StreamView({
         <EmulatorStream
           stream={remoteStream}
           dataChannel={dataChannel}
+          deviceType={device.type}
           peerConnection={peerConnection}
           adaptiveFps={adaptiveFps}
           configuredFps={maxFps}

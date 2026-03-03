@@ -342,12 +342,40 @@ public final class DeviceServer {
             return;
         }
 
-        String keyCode = mapKeyCode(key);
         try {
+            String textArg = mapPrintableKeyToInputTextArg(key);
+            if (textArg != null) {
+                runCommand(new String[]{"input", "text", textArg});
+                return;
+            }
+
+            String keyCode = mapKeyCode(key);
             runCommand(new String[]{"input", "keyevent", keyCode});
         } catch (IOException e) {
             logError("key command failed", e);
         }
+    }
+
+    private static String mapPrintableKeyToInputTextArg(String key) {
+        if (key.length() != 1) {
+            return null;
+        }
+
+        char ch = key.charAt(0);
+        // Keep to printable ASCII; this is what emulator keyboard translation
+        // already documents as reliably supported.
+        if (ch < 32 || ch >= 127) {
+            return null;
+        }
+
+        // `input text` expects spaces as `%s`; `%` itself must be escaped.
+        if (ch == ' ') {
+            return "%s";
+        }
+        if (ch == '%') {
+            return "%%";
+        }
+        return String.valueOf(ch);
     }
 
     private static void handleCaptureSettings(JSONObject obj) {

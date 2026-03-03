@@ -1,3 +1,4 @@
+import type { DeviceType } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef } from "react";
 import {
   ADAPTIVE_CHECK_INTERVAL_MS,
@@ -12,6 +13,8 @@ interface EmulatorStreamProps {
   stream: MediaStream | null;
   /** WebRTC DataChannel for sending touch/key events */
   dataChannel: RTCDataChannel | null;
+  /** Device class being streamed (used for input behavior). */
+  deviceType?: DeviceType;
   /** RTCPeerConnection for diagnostics */
   peerConnection: RTCPeerConnection | null;
   /** Whether to automatically reduce fps on packet loss */
@@ -78,6 +81,154 @@ function mapReleaseToNormalized(
   return { x: clamp01(x), y: clamp01(y) };
 }
 
+type KeyboardEventLike = Pick<
+  KeyboardEvent,
+  "key" | "code" | "isComposing" | "ctrlKey" | "metaKey" | "altKey"
+>;
+
+const KEY_BY_KEY: Readonly<Record<string, string>> = {
+  Backspace: "KEYCODE_DEL",
+  Delete: "KEYCODE_FORWARD_DEL",
+  Enter: "KEYCODE_ENTER",
+  Tab: "KEYCODE_TAB",
+  Escape: "KEYCODE_ESCAPE",
+  " ": "KEYCODE_SPACE",
+  ArrowLeft: "KEYCODE_DPAD_LEFT",
+  ArrowRight: "KEYCODE_DPAD_RIGHT",
+  ArrowUp: "KEYCODE_DPAD_UP",
+  ArrowDown: "KEYCODE_DPAD_DOWN",
+  Home: "KEYCODE_MOVE_HOME",
+  End: "KEYCODE_MOVE_END",
+  PageUp: "KEYCODE_PAGE_UP",
+  PageDown: "KEYCODE_PAGE_DOWN",
+  Insert: "KEYCODE_INSERT",
+  ".": "KEYCODE_PERIOD",
+  ",": "KEYCODE_COMMA",
+  "/": "KEYCODE_SLASH",
+  "\\": "KEYCODE_BACKSLASH",
+  "-": "KEYCODE_MINUS",
+  "=": "KEYCODE_EQUALS",
+  ";": "KEYCODE_SEMICOLON",
+  "'": "KEYCODE_APOSTROPHE",
+  "[": "KEYCODE_LEFT_BRACKET",
+  "]": "KEYCODE_RIGHT_BRACKET",
+  "`": "KEYCODE_GRAVE",
+};
+
+const KEY_BY_CODE: Readonly<Record<string, string>> = {
+  Space: "KEYCODE_SPACE",
+  Enter: "KEYCODE_ENTER",
+  Tab: "KEYCODE_TAB",
+  Escape: "KEYCODE_ESCAPE",
+  Backspace: "KEYCODE_DEL",
+  Delete: "KEYCODE_FORWARD_DEL",
+  ArrowLeft: "KEYCODE_DPAD_LEFT",
+  ArrowRight: "KEYCODE_DPAD_RIGHT",
+  ArrowUp: "KEYCODE_DPAD_UP",
+  ArrowDown: "KEYCODE_DPAD_DOWN",
+  Home: "KEYCODE_MOVE_HOME",
+  End: "KEYCODE_MOVE_END",
+  PageUp: "KEYCODE_PAGE_UP",
+  PageDown: "KEYCODE_PAGE_DOWN",
+  Insert: "KEYCODE_INSERT",
+  Period: "KEYCODE_PERIOD",
+  Comma: "KEYCODE_COMMA",
+  Slash: "KEYCODE_SLASH",
+  Backslash: "KEYCODE_BACKSLASH",
+  Minus: "KEYCODE_MINUS",
+  Equal: "KEYCODE_EQUALS",
+  Semicolon: "KEYCODE_SEMICOLON",
+  Quote: "KEYCODE_APOSTROPHE",
+  BracketLeft: "KEYCODE_LEFT_BRACKET",
+  BracketRight: "KEYCODE_RIGHT_BRACKET",
+  Backquote: "KEYCODE_GRAVE",
+};
+
+function supportsKeyboardInput(deviceType?: DeviceType): boolean {
+  return deviceType === "emulator" || deviceType === "android";
+}
+
+export function mapKeyboardEventToAndroidKey(
+  event: KeyboardEventLike,
+): string | null {
+  if (event.isComposing) return null;
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+
+  // Preserve shifted printable output (e.g. "A", "!", "@") so the
+  // Android device server can inject exact text.
+  if (event.key.length === 1) {
+    return event.key;
+  }
+
+  const fromKey = KEY_BY_KEY[event.key];
+  if (fromKey) return fromKey;
+
+  if (event.code.startsWith("Key") && event.code.length === 4) {
+    return `KEYCODE_${event.code.slice(3).toUpperCase()}`;
+  }
+  if (event.code.startsWith("Digit") && event.code.length === 6) {
+    return `KEYCODE_${event.code.slice(5)}`;
+  }
+
+  return KEY_BY_CODE[event.code] ?? null;
+}
+
+const EMULATOR_NAMED_KEYS = new Set([
+  "Backspace",
+  "Delete",
+  "Enter",
+  "Tab",
+  "Escape",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Insert",
+]);
+
+export function mapKeyboardEventToEmulatorKey(
+  event: KeyboardEventLike,
+): string | null {
+  if (event.isComposing) return null;
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+
+  let key = event.key;
+  if (key === "Esc") key = "Escape";
+  if (key === "Spacebar") key = " ";
+
+  if (key === "" || key === "Dead" || key === "Unidentified") return null;
+  if (key === "Shift" || key === "Control" || key === "Alt" || key === "Meta")
+    return null;
+
+  if (key.length === 1) return key;
+  if (EMULATOR_NAMED_KEYS.has(key)) return key;
+  if (/^F\d{1,2}$/.test(key)) return key;
+
+  return null;
+}
+
+export function mapKeyboardEventToDeviceKey(
+  event: KeyboardEventLike,
+  deviceType?: DeviceType,
+): string | null {
+  if (deviceType === "emulator") {
+    return mapKeyboardEventToEmulatorKey(event);
+  }
+  return mapKeyboardEventToAndroidKey(event);
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
 /**
  * Video element for emulator stream with touch and mouse event capture.
  * Coordinates are normalized to 0.0-1.0, accounting for object-fit letterboxing.
@@ -85,6 +236,7 @@ function mapReleaseToNormalized(
 export function EmulatorStream({
   stream,
   dataChannel,
+  deviceType,
   peerConnection,
   adaptiveFps = false,
   configuredFps = 30,
@@ -271,6 +423,34 @@ export function EmulatorStream({
     return dataChannel && dataChannel.readyState === "open";
   }, [dataChannel]);
 
+  const sendKey = useCallback(
+    (key: string) => {
+      if (!canSend() || !dataChannel) return;
+      dataChannel.send(JSON.stringify({ type: "key", key }));
+    },
+    [canSend, dataChannel],
+  );
+
+  // Capture keyboard events globally while streaming an Android target so
+  // hardware keyboards work without requiring explicit focus inside the video.
+  useEffect(() => {
+    if (!supportsKeyboardInput(deviceType)) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!canSend() || !dataChannel) return;
+      if (isEditableTarget(event.target)) return;
+
+      const key = mapKeyboardEventToDeviceKey(event, deviceType);
+      if (!key) return;
+
+      event.preventDefault();
+      sendKey(key);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [canSend, dataChannel, deviceType, sendKey]);
+
   const sendTouches = useCallback(
     (
       touches: Array<{
@@ -425,6 +605,8 @@ export function EmulatorStream({
       autoPlay
       playsInline
       muted
+      tabIndex={0}
+      aria-label="Device stream"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
