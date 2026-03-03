@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anthropics/yepanywhere/device-bridge/internal/conn"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/conn"
 )
 
 func TestChromeOSDeviceFramingWithMockTransport(t *testing.T) {

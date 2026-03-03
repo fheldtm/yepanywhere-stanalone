@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/yepanywhere/device-bridge/internal/device"
-	"github.com/anthropics/yepanywhere/device-bridge/internal/encoder"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/device"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/encoder"
 )
 
 // SignalingHandler manages HTTP signaling for WebRTC sessions.

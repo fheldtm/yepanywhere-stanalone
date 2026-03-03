@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/anthropics/yepanywhere/device-bridge/internal/conn"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/conn"
 )
 
 const (

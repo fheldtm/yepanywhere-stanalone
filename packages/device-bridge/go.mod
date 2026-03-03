@@ -1,4 +1,4 @@
-module github.com/anthropics/yepanywhere/device-bridge
+module github.com/kzahel/yepanywhere/device-bridge
 
 go 1.25.0
 

@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	bridgeDevice "github.com/anthropics/yepanywhere/device-bridge/internal/device"
-	"github.com/anthropics/yepanywhere/device-bridge/internal/emulator"
-	"github.com/anthropics/yepanywhere/device-bridge/internal/encoder"
-	"github.com/anthropics/yepanywhere/device-bridge/internal/ipc"
-	"github.com/anthropics/yepanywhere/device-bridge/internal/stream"
+	bridgeDevice "github.com/kzahel/yepanywhere/device-bridge/internal/device"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/emulator"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/encoder"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/ipc"
+	"github.com/kzahel/yepanywhere/device-bridge/internal/stream"
 )
 
 //go:embed web
