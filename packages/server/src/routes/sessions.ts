@@ -1077,9 +1077,20 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       return c.json(result, 202); // 202 Accepted - queued for processing
     }
 
-    // Save executor to session metadata for resume
-    if (executor && deps.sessionMetadataService) {
-      await deps.sessionMetadataService.setExecutor(result.sessionId, executor);
+    // Save provider and executor to session metadata for resume
+    if (deps.sessionMetadataService) {
+      if (body.provider) {
+        await deps.sessionMetadataService.setProvider(
+          result.sessionId,
+          body.provider,
+        );
+      }
+      if (executor) {
+        await deps.sessionMetadataService.setExecutor(
+          result.sessionId,
+          executor,
+        );
+      }
     }
 
     return c.json({
@@ -1159,9 +1170,20 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       return c.json(result, 202); // 202 Accepted - queued for processing
     }
 
-    // Save executor to session metadata for resume
-    if (executor && deps.sessionMetadataService) {
-      await deps.sessionMetadataService.setExecutor(result.sessionId, executor);
+    // Save provider and executor to session metadata for resume
+    if (deps.sessionMetadataService) {
+      if (body.provider) {
+        await deps.sessionMetadataService.setProvider(
+          result.sessionId,
+          body.provider,
+        );
+      }
+      if (executor) {
+        await deps.sessionMetadataService.setExecutor(
+          result.sessionId,
+          executor,
+        );
+      }
     }
 
     return c.json({
@@ -1259,8 +1281,14 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       deps.serverSettingsService?.getSetting("globalInstructions") || undefined;
 
     // Look up the session's original provider so we resume with the correct one
-    // (e.g., claude-ollama sessions need the Ollama provider, not default Claude)
+    // (e.g., claude-ollama sessions need the Ollama provider, not default Claude).
+    // Check metadata first (explicitly saved on creation), then fall back to reader.
     let providerName = body.provider;
+    if (!providerName) {
+      providerName = deps.sessionMetadataService?.getProvider(sessionId) as
+        | ProviderName
+        | undefined;
+    }
     if (!providerName) {
       const reader = deps.readerFactory(project);
       const sessionSummary = await reader.getSessionSummary(

@@ -177,6 +177,14 @@ export class SessionMetadataService {
   }
 
   /**
+   * Get the provider for a session.
+   * Returns undefined if the provider was never explicitly saved.
+   */
+  getProvider(sessionId: string): string | undefined {
+    return this.state.sessions[sessionId]?.provider;
+  }
+
+  /**
    * Get the executor for a session.
    * Returns undefined if the session ran locally or executor is unknown.
    */
