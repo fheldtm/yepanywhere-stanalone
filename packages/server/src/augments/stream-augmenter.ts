@@ -337,9 +337,7 @@ export async function createStreamAugmenter(
     // Support both snake_case and camelCase keys across provider stream formats.
     if (message.type === "user") {
       const toolUseResult = (message.tool_use_result ??
-        message.toolUseResult) as
-        | ExitPlanModeResult
-        | undefined;
+        message.toolUseResult) as ExitPlanModeResult | undefined;
       if (toolUseResult?.plan && !toolUseResult._renderedHtml) {
         try {
           toolUseResult._renderedHtml = await renderMarkdownToHtml(
@@ -351,8 +349,7 @@ export async function createStreamAugmenter(
       }
 
       // Check for Read tool_result and augment with syntax highlighting
-      const readResult = (message.tool_use_result ??
-        message.toolUseResult) as
+      const readResult = (message.tool_use_result ?? message.toolUseResult) as
         | ReadResultWithAugment
         | undefined;
       if (

@@ -149,8 +149,7 @@ describe("createSessionSubscription", () => {
     expect(messageEvents).toHaveLength(2);
     expect(
       messageEvents.every(
-        ([, data]) =>
-          (data as { isReplay?: boolean }).isReplay === true,
+        ([, data]) => (data as { isReplay?: boolean }).isReplay === true,
       ),
     ).toBe(true);
   });

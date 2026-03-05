@@ -294,10 +294,9 @@ describe("CodexProvider Event Normalization", () => {
       ],
     });
 
-    const resultBlock = (
-      (messages[1]?.message as { content?: unknown[] } | undefined)?.content ??
-      []
-    )[0] as Record<string, unknown>;
+    const resultBlock = ((
+      messages[1]?.message as { content?: unknown[] } | undefined
+    )?.content ?? [])[0] as Record<string, unknown>;
     expect(resultBlock.type).toBe("tool_result");
     expect(resultBlock.tool_use_id).toBe("call-grep");
     expect(resultBlock.is_error).toBeUndefined();

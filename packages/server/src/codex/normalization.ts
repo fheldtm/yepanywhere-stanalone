@@ -33,7 +33,8 @@ export interface NormalizedCodexToolOutput {
   isError: boolean;
 }
 
-interface NormalizedCodexToolOutputWithExitCode extends NormalizedCodexToolOutput {
+interface NormalizedCodexToolOutputWithExitCode
+  extends NormalizedCodexToolOutput {
   exitCode?: number;
 }
 
@@ -126,7 +127,10 @@ export function normalizeCodexToolOutputWithContext(
   } else if (context?.toolName === "Read" && context.readShellInfo) {
     if (!isError) {
       const readContent = extractCodexShellOutputContent(content);
-      const readResult = normalizeReadOutput(readContent, context.readShellInfo);
+      const readResult = normalizeReadOutput(
+        readContent,
+        context.readShellInfo,
+      );
       structured = readResult;
       content = readContent;
     }
@@ -350,7 +354,9 @@ function parseRipgrepCommand(command: string): Record<string, unknown> | null {
     return null;
   }
 
-  if (tokens.some((token) => token === "|" || token === "&&" || token === ";")) {
+  if (
+    tokens.some((token) => token === "|" || token === "&&" || token === ";")
+  ) {
     return null;
   }
 
