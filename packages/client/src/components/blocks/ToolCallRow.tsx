@@ -39,7 +39,10 @@ export const ToolCallRow = memo(function ToolCallRow({
   const hasCollapsedPreview =
     toolRegistry.hasCollapsedPreview(toolName) && !suppressCollapsedPreview;
   const hideSummaryWhenPreviewVisible =
-    toolName === "Bash" && status === "pending" && hasCollapsedPreview;
+    toolName === "Bash" &&
+    status === "pending" &&
+    hasCollapsedPreview &&
+    isCodexLikeBashInput(toolInput, sessionProvider);
   // Tools with collapsed preview or interactive summary don't expand
   const isNonExpandable = hasInteractiveSummary || hasCollapsedPreview;
 
@@ -193,9 +196,14 @@ function shouldSuppressBashCollapsedPreview(
     return false;
   }
 
-  // Keep completed Codex bash rows compact by default (header + expandable details),
-  // which matches the live-stream condensed row behavior and avoids persistent IN/OUT cards.
-  if (status === "complete" || status === "error" || status === "aborted") {
+  // Keep Codex bash rows compact by default (header + expandable details) for
+  // both running and completed commands to avoid persistent IN/OUT cards.
+  if (
+    status === "pending" ||
+    status === "complete" ||
+    status === "error" ||
+    status === "aborted"
+  ) {
     return true;
   }
 
