@@ -206,6 +206,11 @@ export function useSession(
       if (result.pendingInputRequest) {
         setPendingInputRequest(result.pendingInputRequest as InputRequest);
       }
+      // Set slash commands from API response so the "/" button appears reliably
+      // (the SSE init message that normally carries these is discarded after ~30s)
+      if (result.slashCommands?.length) {
+        setSlashCommands(result.slashCommands.map((c) => c.name));
+      }
     },
     [applyServerModeUpdate],
   );

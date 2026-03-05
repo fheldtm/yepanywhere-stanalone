@@ -719,6 +719,11 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const pendingInputRequest =
       process?.state.type === "waiting-input" ? process.state.request : null;
 
+    // Get available slash commands from active process
+    const slashCommands = process?.supportsDynamicCommands
+      ? await process.supportedCommands()
+      : null;
+
     // Read minimal session info from disk (just for title/timestamps, no messages)
     const reader = deps.readerFactory(project);
     const sessionSummary = await reader.getSessionSummary(sessionId, projectId);
@@ -761,6 +766,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       },
       ownership,
       pendingInputRequest,
+      slashCommands,
     });
   });
 
@@ -886,6 +892,13 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const pendingInputRequest =
       process?.state.type === "waiting-input" ? process.state.request : null;
 
+    // Get available slash commands from active process (for "/" button in toolbar)
+    // The init message that normally carries these gets discarded from the SSE buffer
+    // after ~30s, so we attach them to the REST response for reliable delivery.
+    const slashCommands = process?.supportsDynamicCommands
+      ? await process.supportedCommands()
+      : null;
+
     if (!session) {
       // Session file doesn't exist yet - only valid if we own the process
       if (process) {
@@ -931,6 +944,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
           messages: processMessages,
           ownership,
           pendingInputRequest,
+          slashCommands,
         });
       }
       return c.json({ error: "Session not found" }, 404);
@@ -996,6 +1010,7 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       messages: session.messages,
       ownership,
       pendingInputRequest,
+      slashCommands,
       ...(paginationInfo && { pagination: paginationInfo }),
     });
   });

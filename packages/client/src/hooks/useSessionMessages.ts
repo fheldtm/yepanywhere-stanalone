@@ -27,6 +27,11 @@ export interface SessionLoadResult {
   session: Session;
   status: SessionStatus;
   pendingInputRequest?: unknown;
+  slashCommands?: Array<{
+    name: string;
+    description: string;
+    argumentHint?: string;
+  }> | null;
 }
 
 /** Options for useSessionMessages */
@@ -394,6 +399,7 @@ export function useSessionMessages(
           session: data.session,
           status: data.ownership,
           pendingInputRequest: data.pendingInputRequest,
+          slashCommands: data.slashCommands,
         });
       })
       .catch((err) => {

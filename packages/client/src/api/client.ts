@@ -9,6 +9,7 @@ import type {
   PendingInputType,
   ProviderInfo,
   ProviderName,
+  SlashCommand,
   ThinkingOption,
   UploadedFile,
 } from "@yep-anywhere/shared";
@@ -372,6 +373,7 @@ export const api = {
       messages: Message[];
       ownership: SessionStatus;
       pendingInputRequest?: InputRequest | null;
+      slashCommands?: SlashCommand[] | null;
       pagination?: PaginationInfo;
     }>(`/projects/${projectId}/sessions/${sessionId}${qs ? `?${qs}` : ""}`);
   },
@@ -385,6 +387,7 @@ export const api = {
       session: Session;
       ownership: SessionStatus;
       pendingInputRequest?: InputRequest | null;
+      slashCommands?: SlashCommand[] | null;
     }>(`/projects/${projectId}/sessions/${sessionId}/metadata`),
 
   /**
