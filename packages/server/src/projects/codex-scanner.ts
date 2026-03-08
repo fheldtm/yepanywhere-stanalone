@@ -21,11 +21,16 @@ import { readFirstLine } from "../utils/jsonl.js";
 import { encodeProjectId } from "./paths.js";
 
 export const CODEX_SESSIONS_DIR =
-  process.env.CODEX_SESSIONS_DIR ?? join(homedir(), ".codex", "sessions");
-export const CODEX_DIR = CODEX_SESSIONS_DIR.replace(
-  new RegExp(`\\${sep}sessions$`),
-  "",
-);
+  process.env.CODEX_SESSIONS_DIR ?? getDefaultCodexSessionsDir();
+export const CODEX_DIR = process.env.CODEX_HOME ?? join(homedir(), ".codex");
+
+export function getDefaultCodexHomeDir(): string {
+  return process.env.CODEX_HOME ?? join(homedir(), ".codex");
+}
+
+export function getDefaultCodexSessionsDir(): string {
+  return join(getDefaultCodexHomeDir(), "sessions");
+}
 
 interface CodexSessionMeta {
   id: string;
@@ -42,6 +47,8 @@ interface CodexSessionInfo {
   timestamp: string;
   mtime: number;
 }
+
+const CODEX_META_READ_MAX_BYTES = 1024 * 1024;
 
 export interface CodexScannerOptions {
   sessionsDir?: string; // override for testing
@@ -224,7 +231,7 @@ export class CodexSessionScanner {
     try {
       const [stats, firstLine] = await Promise.all([
         stat(filePath),
-        readFirstLine(filePath, 65536),
+        readFirstLine(filePath, CODEX_META_READ_MAX_BYTES),
       ]);
 
       if (!firstLine) {

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Level as LogLevel } from "pino";
+import { getDefaultCodexSessionsDir } from "./projects/codex-scanner.js";
 import type { PermissionMode } from "./sdk/types.js";
 
 /**
@@ -136,8 +137,7 @@ export function loadConfig(): Config {
     process.env.GEMINI_SESSIONS_DIR ??
     path.join(os.homedir(), ".gemini", "tmp");
   const codexSessionsDir =
-    process.env.CODEX_SESSIONS_DIR ??
-    path.join(os.homedir(), ".codex", "sessions");
+    process.env.CODEX_SESSIONS_DIR ?? getDefaultCodexSessionsDir();
   // Enable periodic rescan on macOS (fs.watch misses deep file writes)
   // and Windows (fs.watch({ recursive: true }) can be unreliable for deep trees)
   const defaultCodexWatchPeriodicRescanMs =

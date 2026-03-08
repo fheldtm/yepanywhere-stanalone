@@ -65,6 +65,8 @@ interface CodexSessionFile {
   size: number;
 }
 
+const CODEX_META_READ_MAX_BYTES = 1024 * 1024;
+
 /**
  * Codex-specific session reader for Codex CLI JSONL files.
  *
@@ -346,7 +348,7 @@ export class CodexSessionReader implements ISessionReader {
     try {
       const [stats, firstLine] = await Promise.all([
         stat(filePath),
-        readFirstLine(filePath, 65536),
+        readFirstLine(filePath, CODEX_META_READ_MAX_BYTES),
       ]);
 
       if (!firstLine) return null;

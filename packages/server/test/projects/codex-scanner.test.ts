@@ -89,7 +89,7 @@ describe("CodexSessionScanner", () => {
     expect(projectB?.sessionCount).toBe(1);
   });
 
-  it("parses session_meta with large base_instructions (regression #23)", async () => {
+  it("parses session_meta with very large base_instructions over 64KB", async () => {
     const sessionsDir = join(tmpdir(), `codex-scan-${randomUUID()}`);
     tempDirs.push(sessionsDir);
 
@@ -97,7 +97,7 @@ describe("CodexSessionScanner", () => {
     await mkdir(dateDir, { recursive: true });
 
     // Simulate Codex Desktop which embeds the full system prompt (~11KB+)
-    const largeInstructions = "x".repeat(15_000);
+    const largeInstructions = "x".repeat(80_000);
     const id = randomUUID();
     const meta = JSON.stringify({
       type: "session_meta",
@@ -113,8 +113,8 @@ describe("CodexSessionScanner", () => {
       },
     });
 
-    // Verify the first line is well over 4KB
-    expect(Buffer.byteLength(meta)).toBeGreaterThan(10_000);
+    // Regression guard: older scanner logic only read the first 64KB.
+    expect(Buffer.byteLength(meta)).toBeGreaterThan(65_536);
 
     await writeFile(join(dateDir, `rollout-${id}.jsonl`), `${meta}\n`);
 
