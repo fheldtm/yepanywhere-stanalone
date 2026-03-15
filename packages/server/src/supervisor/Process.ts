@@ -173,6 +173,8 @@ export class Process {
 
   /** Resolved model name from the first assistant message (e.g., "claude-sonnet-4-5-20250929") */
   private _resolvedModel: string | undefined;
+  /** Context window size reported by SDK in result messages' modelUsage */
+  private _contextWindow: number | undefined;
 
   /** Deferred message queue — messages queued while agent is in-turn, auto-sent when turn ends */
   private deferredQueue: { message: UserMessage; timestamp: string }[] = [];
@@ -262,6 +264,11 @@ export class Process {
    */
   get resolvedModel(): string | undefined {
     return this._resolvedModel ?? this.model;
+  }
+
+  /** Context window size reported by SDK (from result message modelUsage) */
+  get contextWindow(): number | undefined {
+    return this._contextWindow;
   }
 
   get state(): ProcessState {
@@ -1143,7 +1150,8 @@ export class Process {
           "LSP",
           "WebFetch",
           "WebSearch",
-          "Task", // Subagent exploration
+          "Task", // Subagent exploration (legacy)
+          "Agent", // Subagent exploration (SDK 0.2.76+)
           "TaskOutput", // Reading subagent results
         ];
         if (readOnlyTools.includes(toolName)) {
@@ -1186,7 +1194,8 @@ export class Process {
           "LSP",
           "WebFetch",
           "WebSearch",
-          "Task", // Subagent exploration
+          "Task", // Subagent exploration (legacy)
+          "Agent", // Subagent exploration (SDK 0.2.76+)
           "TaskOutput", // Reading subagent results
         ];
         if (readOnlyTools.includes(toolName)) {
@@ -1206,7 +1215,8 @@ export class Process {
           "LSP",
           "WebFetch",
           "WebSearch",
-          "Task", // Subagent exploration
+          "Task", // Subagent exploration (legacy)
+          "Agent", // Subagent exploration (SDK 0.2.76+)
           "TaskOutput", // Reading subagent results
         ];
         if (readOnlyTools.includes(toolName)) {
@@ -1543,6 +1553,23 @@ export class Process {
           // Legacy mock SDK behavior - handle input_request message
           this.handleInputRequest(message);
         } else if (message.type === "result") {
+          // Capture context window from modelUsage in result messages.
+          // Keys may include suffixes like "[1m]" (e.g. "claude-opus-4-6[1m]"),
+          // so we take the max contextWindow across all model entries.
+          if (message.modelUsage) {
+            const mu = message.modelUsage as Record<
+              string,
+              { contextWindow?: number }
+            >;
+            for (const entry of Object.values(mu)) {
+              if (entry.contextWindow && entry.contextWindow > 0) {
+                this._contextWindow = Math.max(
+                  this._contextWindow ?? 0,
+                  entry.contextWindow,
+                );
+              }
+            }
+          }
           this.transitionToIdle();
         }
       }
