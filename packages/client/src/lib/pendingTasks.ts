@@ -44,7 +44,7 @@ export function findPendingTasks(messages: Message[]): PendingTask[] {
       // Find Task tool_use blocks
       if (
         block.type === "tool_use" &&
-        block.name === "Task" &&
+        (block.name === "Task" || block.name === "Agent") &&
         typeof block.id === "string"
       ) {
         const input = block.input as

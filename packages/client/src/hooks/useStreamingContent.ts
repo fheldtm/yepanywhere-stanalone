@@ -160,12 +160,15 @@ export function useStreamingContent(
 
       const eventType = event.type as string | undefined;
 
-      // Check if this is a subagent stream (marked by server in stream.ts)
-      // Use parentToolUseId as the routing key (it's the Task tool_use id)
+      // Check if this is a subagent stream (marked by server via markSubagent)
+      // Legacy SDK: uses parentToolUseId as routing key
+      // SDK 0.2.76+: uses agentId directly (no parentToolUseId)
       const isSubagentStream =
-        data.isSubagent && typeof data.parentToolUseId === "string";
+        data.isSubagent &&
+        (typeof data.parentToolUseId === "string" ||
+          typeof data.agentId === "string");
       const streamAgentId = isSubagentStream
-        ? (data.parentToolUseId as string)
+        ? ((data.parentToolUseId as string) ?? (data.agentId as string))
         : undefined;
 
       // Set toolUseToAgent mapping for subagent streams so TaskRenderer can find content

@@ -336,6 +336,45 @@ describe("useStreamingContent", () => {
       );
     });
 
+    it("routes subagent streams with agentId only (SDK 0.2.76+, no parentToolUseId)", () => {
+      const { result } = renderHook(() =>
+        useStreamingContent(defaultOptions()),
+      );
+
+      act(() => {
+        result.current.handleStreamEvent({
+          type: "stream_event",
+          isSubagent: true,
+          agentId: "a1dd713c82c78b9ed",
+          // No parentToolUseId — new SDK format
+          event: {
+            type: "message_start",
+            message: { id: "msg-new-sdk" },
+          },
+        });
+        result.current.handleStreamEvent({
+          type: "stream_event",
+          isSubagent: true,
+          agentId: "a1dd713c82c78b9ed",
+          event: {
+            type: "content_block_start",
+            index: 0,
+            content_block: { type: "text", text: "" },
+          },
+        });
+      });
+
+      // Should use agentId as the routing key
+      expect(onToolUseMapping).toHaveBeenCalledWith(
+        "a1dd713c82c78b9ed",
+        "a1dd713c82c78b9ed",
+      );
+      expect(onUpdateMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ _isStreaming: true }),
+        "a1dd713c82c78b9ed",
+      );
+    });
+
     it("extracts context usage for subagent streams", () => {
       const { result } = renderHook(() =>
         useStreamingContent(defaultOptions()),

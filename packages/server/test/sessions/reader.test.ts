@@ -648,8 +648,8 @@ describe("SessionReader", () => {
       expect(mappings).toHaveLength(0);
     });
 
-    it("skips agent files without parent_tool_use_id", async () => {
-      // Agent file without parent_tool_use_id
+    it("includes agents without parent_tool_use_id using agentId as placeholder", async () => {
+      // Agent file without parent_tool_use_id (new SDK format)
       const agent1 = [
         JSON.stringify({
           type: "system",
@@ -663,7 +663,7 @@ describe("SessionReader", () => {
       ].join("\n");
       await writeFile(join(testDir, "agent-noparent.jsonl"), agent1);
 
-      // Agent file with parent_tool_use_id
+      // Agent file with parent_tool_use_id (legacy format)
       const agent2 = [
         JSON.stringify({
           type: "system",
@@ -675,10 +675,15 @@ describe("SessionReader", () => {
 
       const mappings = await reader.getAgentMappings();
 
-      expect(mappings).toHaveLength(1);
-      expect(mappings[0]).toEqual({
+      expect(mappings).toHaveLength(2);
+      expect(mappings).toContainEqual({
         toolUseId: "tool-use-xyz",
         agentId: "hasparent",
+      });
+      // New SDK: agentId used as placeholder toolUseId
+      expect(mappings).toContainEqual({
+        toolUseId: "noparent",
+        agentId: "noparent",
       });
     });
 
@@ -731,6 +736,221 @@ describe("SessionReader", () => {
         toolUseId: "tool-use-later",
         agentId: "later",
       });
+    });
+  });
+
+  describe("getAgentMappings — SDK 0.2.76+ (subagents/ dir)", () => {
+    it("finds agent files in subagents/ directory", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      // New SDK format: no parent_tool_use_id, has agentId and isSidechain
+      const agent = [
+        JSON.stringify({
+          type: "user",
+          uuid: "msg-1",
+          agentId: "abc123",
+          isSidechain: true,
+          sessionId: "parent-session",
+          message: { content: "Hello" },
+        }),
+      ].join("\n");
+      await writeFile(join(subagentsDir, "agent-abc123.jsonl"), agent);
+
+      const mappings = await reader.getAgentMappings();
+      expect(mappings).toHaveLength(1);
+      // New SDK: uses agentId as placeholder toolUseId
+      expect(mappings[0]).toEqual({
+        toolUseId: "abc123",
+        agentId: "abc123",
+      });
+    });
+
+    it("reads agentType from meta.json", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agent = [
+        JSON.stringify({
+          type: "user",
+          uuid: "msg-1",
+          agentId: "explore1",
+          isSidechain: true,
+          message: { content: "Hello" },
+        }),
+      ].join("\n");
+      await writeFile(join(subagentsDir, "agent-explore1.jsonl"), agent);
+      await writeFile(
+        join(subagentsDir, "agent-explore1.meta.json"),
+        JSON.stringify({ agentType: "Explore" }),
+      );
+
+      const mappings = await reader.getAgentMappings();
+      expect(mappings).toHaveLength(1);
+      expect(mappings[0]).toEqual({
+        toolUseId: "explore1",
+        agentId: "explore1",
+        agentType: "Explore",
+      });
+    });
+
+    it("deduplicates across subagents/ and root dirs", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agentContent = JSON.stringify({
+        type: "user",
+        uuid: "msg-1",
+        agentId: "dedup1",
+        isSidechain: true,
+        message: { content: "Hello" },
+      });
+
+      // Same agent in both locations
+      await writeFile(join(subagentsDir, "agent-dedup1.jsonl"), agentContent);
+      await writeFile(join(testDir, "agent-dedup1.jsonl"), agentContent);
+
+      const mappings = await reader.getAgentMappings();
+      expect(mappings).toHaveLength(1);
+    });
+
+    it("returns agentType with legacy parent_tool_use_id mapping", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agent = [
+        JSON.stringify({
+          type: "system",
+          uuid: "sys-1",
+          parent_tool_use_id: "tool-use-legacy",
+        }),
+      ].join("\n");
+      await writeFile(join(subagentsDir, "agent-legacy1.jsonl"), agent);
+      await writeFile(
+        join(subagentsDir, "agent-legacy1.meta.json"),
+        JSON.stringify({ agentType: "Plan" }),
+      );
+
+      const mappings = await reader.getAgentMappings();
+      expect(mappings).toHaveLength(1);
+      expect(mappings[0]).toEqual({
+        toolUseId: "tool-use-legacy",
+        agentId: "legacy1",
+        agentType: "Plan",
+      });
+    });
+  });
+
+  describe("getAgentSession — SDK 0.2.76+ (subagents/ dir)", () => {
+    it("loads agent from subagents/ directory", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agent = [
+        JSON.stringify({
+          type: "user",
+          uuid: "msg-1",
+          agentId: "sub1",
+          isSidechain: true,
+          message: { content: "Research task" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          uuid: "msg-2",
+          parentUuid: "msg-1",
+          agentId: "sub1",
+          isSidechain: true,
+          message: { content: [{ type: "text", text: "Found info" }] },
+        }),
+        JSON.stringify({
+          type: "result",
+          uuid: "msg-3",
+          parentUuid: "msg-2",
+        }),
+      ].join("\n");
+      await writeFile(join(subagentsDir, "agent-sub1.jsonl"), agent);
+
+      const session = await reader.getAgentSession("sub1");
+      expect(session.messages).toHaveLength(3);
+      expect(session.status).toBe("completed");
+    });
+
+    it("reads agentType from meta.json", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agent = [
+        JSON.stringify({
+          type: "user",
+          uuid: "msg-1",
+          message: { content: "Task" },
+        }),
+        JSON.stringify({
+          type: "result",
+          uuid: "msg-2",
+          parentUuid: "msg-1",
+        }),
+      ].join("\n");
+      await writeFile(join(subagentsDir, "agent-typed1.jsonl"), agent);
+      await writeFile(
+        join(subagentsDir, "agent-typed1.meta.json"),
+        JSON.stringify({ agentType: "Explore" }),
+      );
+
+      const session = await reader.getAgentSession("typed1");
+      expect(session.status).toBe("completed");
+      expect(session.agentType).toBe("Explore");
+    });
+
+    it("returns undefined agentType when no meta.json", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      const agent = JSON.stringify({
+        type: "user",
+        uuid: "msg-1",
+        message: { content: "Task" },
+      });
+      await writeFile(join(subagentsDir, "agent-notype.jsonl"), agent);
+
+      const session = await reader.getAgentSession("notype");
+      expect(session.agentType).toBeUndefined();
+    });
+
+    it("prefers subagents/ over root dir", async () => {
+      const subagentsDir = join(testDir, "subagents");
+      await mkdir(subagentsDir, { recursive: true });
+
+      // Root dir has different content
+      await writeFile(
+        join(testDir, "agent-pref1.jsonl"),
+        JSON.stringify({
+          type: "user",
+          uuid: "root-msg",
+          message: { content: "Root version" },
+        }),
+      );
+      // subagents/ dir has different content
+      await writeFile(
+        join(subagentsDir, "agent-pref1.jsonl"),
+        [
+          JSON.stringify({
+            type: "user",
+            uuid: "sub-msg",
+            message: { content: "Subagents version" },
+          }),
+          JSON.stringify({
+            type: "result",
+            uuid: "sub-result",
+            parentUuid: "sub-msg",
+          }),
+        ].join("\n"),
+      );
+
+      const session = await reader.getAgentSession("pref1");
+      // Should load from subagents/ (checked first)
+      expect(session.messages).toHaveLength(2);
+      expect(session.status).toBe("completed");
     });
   });
 

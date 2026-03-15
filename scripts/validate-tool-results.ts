@@ -42,6 +42,7 @@ import {
 // Registry of tool result schemas
 const toolSchemas: Record<string, ZodType> = {
   Task: TaskResultSchema,
+  Agent: TaskResultSchema, // SDK 0.2.76+ renamed Task → Agent
   Bash: BashResultSchema,
   Read: ReadResultSchema,
   Edit: EditResultSchema,

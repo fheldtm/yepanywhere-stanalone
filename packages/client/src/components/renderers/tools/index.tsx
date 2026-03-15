@@ -10,6 +10,7 @@ const TOOL_NAME_ALIASES: Record<string, string> = {
   apply_patch: "Edit",
   web_search_call: "WebSearch",
   search_query: "WebSearch",
+  Agent: "Task", // SDK 0.2.76+ renamed Task → Agent
 };
 
 function canonicalizeToolName(toolName: string): string {

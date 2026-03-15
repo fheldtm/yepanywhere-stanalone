@@ -108,6 +108,7 @@ function getDefaultInputSummary(toolName: string, input: unknown): string {
       if (typeof i.pattern === "string") return `"${i.pattern}"`;
       break;
     case "Task":
+    case "Agent":
       if (typeof i.description === "string") return truncate(i.description, 30);
       break;
     case "WebSearch":

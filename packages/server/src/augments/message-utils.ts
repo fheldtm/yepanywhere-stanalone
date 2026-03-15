@@ -105,17 +105,30 @@ export function isStreamingComplete(message: Record<string, unknown>): boolean {
 
 /**
  * Mark subagent messages with isSubagent and parentToolUseId fields.
- * Subagent messages have parent_tool_use_id set (pointing to Task tool_use id).
+ *
+ * Legacy SDK: messages have parent_tool_use_id (pointing to Task tool_use id).
+ * SDK 0.2.76+: messages have agentId and isSidechain=true instead.
  */
-export function markSubagent<T extends { parent_tool_use_id?: string | null }>(
-  message: T,
-): T & { isSubagent?: boolean; parentToolUseId?: string } {
-  // If parent_tool_use_id is set, it's a subagent message
+export function markSubagent<
+  T extends {
+    parent_tool_use_id?: string | null;
+    agentId?: string | null;
+    isSidechain?: boolean;
+  },
+>(message: T): T & { isSubagent?: boolean; parentToolUseId?: string } {
+  // Legacy: parent_tool_use_id identifies subagent messages
   if (message.parent_tool_use_id) {
     return {
       ...message,
       isSubagent: true,
       parentToolUseId: message.parent_tool_use_id,
+    };
+  }
+  // SDK 0.2.76+: agentId + isSidechain identifies subagent messages
+  if (message.agentId && message.isSidechain) {
+    return {
+      ...message,
+      isSubagent: true,
     };
   }
   return message;
