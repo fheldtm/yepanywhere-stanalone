@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-03-19
+
+### Added
+- Provider filtering and voice input toggle via environment variables
+- Dynamic model list and Claude profile support
+- Age filter and bulk archive for filtered sessions
+- Approval panel truncation with view-details modal for large tool calls
+
+### Changed
+- Update Claude Agent SDK to 0.2.77
+
+### Fixed
+- Prevent NODE_ENV=production from leaking into Claude Code child processes (#41)
+
 ## [0.4.13] - 2026-03-15
 
 ### Changed
