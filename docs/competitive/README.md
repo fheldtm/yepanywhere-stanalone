@@ -70,6 +70,10 @@ Features competitors have that we should consider:
 - **Scheduling/automations** (Codex App, AionUi)
 - **Messaging platform bots** as mobile proxy (AionUi — Telegram/Lark/DingTalk)
 
+## Related (Non-Competitive)
+
+See **[Ecosystem](../ecosystem/)** for adjacent projects — agent-to-agent coordination, workflow DAG platforms, multi-agent orchestrators — that aren't direct competitors but operate in complementary spaces.
+
 ## Last Updated
 
-2026-02-21
+2026-03-17
