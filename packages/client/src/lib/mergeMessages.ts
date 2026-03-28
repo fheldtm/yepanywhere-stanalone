@@ -17,6 +17,85 @@ export function getMessageContent(m: Message): unknown {
   return m.content ?? (m.message as { content?: unknown } | undefined)?.content;
 }
 
+function getMessageRole(m: Message): string | undefined {
+  const nestedRole = (m.message as { role?: unknown } | undefined)?.role;
+  if (
+    nestedRole === "user" ||
+    nestedRole === "assistant" ||
+    nestedRole === "system"
+  ) {
+    return nestedRole;
+  }
+  if (m.role === "user" || m.role === "assistant" || m.role === "system") {
+    return m.role;
+  }
+  return undefined;
+}
+
+function getConversationSiblingKey(m: Message): string | null {
+  if (m.parentUuid == null) {
+    return null;
+  }
+
+  const type = m.type;
+  if (type !== "user" && type !== "assistant") {
+    return null;
+  }
+
+  return `${m.parentUuid}:${type}:${getMessageRole(m) ?? ""}`;
+}
+
+function hasAuthoritativeSibling(existing: Message[], incoming: Message): boolean {
+  const incomingKey = getConversationSiblingKey(incoming);
+  if (!incomingKey) {
+    return false;
+  }
+
+  const incomingId = getMessageId(incoming);
+  return existing.some((message) => {
+    if ((message._source ?? "sdk") !== "jsonl") {
+      return false;
+    }
+    if (getMessageId(message) === incomingId) {
+      return false;
+    }
+    return getConversationSiblingKey(message) === incomingKey;
+  });
+}
+
+function pruneSupersededSdkSiblings(
+  messages: Message[],
+  authoritativeMessages: Message[],
+): Message[] {
+  const authoritativeSiblingKeys = new Set<string>();
+
+  for (const message of authoritativeMessages) {
+    const key = getConversationSiblingKey(message);
+    if (key) {
+      authoritativeSiblingKeys.add(key);
+    }
+  }
+
+  if (authoritativeSiblingKeys.size === 0) {
+    return messages;
+  }
+
+  const filtered = messages.filter((message) => {
+    if ((message._source ?? "sdk") === "jsonl") {
+      return true;
+    }
+
+    const key = getConversationSiblingKey(message);
+    if (!key) {
+      return true;
+    }
+
+    return !authoritativeSiblingKeys.has(key);
+  });
+
+  return filtered.length === messages.length ? messages : filtered;
+}
+
 /**
  * Merge messages from different sources.
  * JSONL (from disk) is authoritative; SDK (streaming) provides real-time updates.
@@ -114,12 +193,14 @@ export function mergeJSONLMessages(
     }
   }
 
+  const reconciled = pruneSupersededSdkSiblings(result, incoming);
+
   // Reorder messages by parentUuid chain to fix race conditions
   // where stream messages arrived before their parent (e.g., agent response before user message)
   if (options?.skipDagOrdering) {
-    return { messages: result };
+    return { messages: reconciled };
   }
-  return { messages: orderByParentChain(result) };
+  return { messages: orderByParentChain(reconciled) };
 }
 
 export interface MergeStreamResult {
@@ -142,6 +223,13 @@ export function mergeStreamMessage(
   existing: Message[],
   incoming: Message,
 ): MergeStreamResult {
+  if (incoming.isReplay === true && hasAuthoritativeSibling(existing, incoming)) {
+    return {
+      messages: existing,
+      index: -1,
+    };
+  }
+
   const incomingId = getMessageId(incoming);
   // Check for existing message with same ID
   const existingIdx = existing.findIndex((m) => getMessageId(m) === incomingId);

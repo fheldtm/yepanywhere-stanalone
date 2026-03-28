@@ -5,7 +5,14 @@ import type {
   UrlProjectId,
 } from "@yep-anywhere/shared";
 import { describe, expect, it } from "vitest";
+import { preprocessMessages } from "../../client/src/lib/preprocessMessages.ts";
+import {
+  mergeJSONLMessages,
+  mergeStreamMessage,
+} from "../../client/src/lib/mergeMessages.ts";
+import type { Message as ClientMessage } from "../../client/src/types.ts";
 import { CodexProvider } from "../src/sdk/providers/codex.js";
+import { normalizeSession } from "../src/sessions/normalization.js";
 import type { LoadedSession } from "../src/sessions/types.js";
 import {
   assertRenderParity,
@@ -64,6 +71,44 @@ function buildLoadedClaudeSession(
       session: { messages },
     } as UnifiedSession,
   };
+}
+
+function normalizeClaudeMessages(
+  messages: ClaudeSessionEntry[],
+): ClientMessage[] {
+  return normalizeSession(buildLoadedClaudeSession(messages)).messages;
+}
+
+function buildReplayMessages(
+  messages: ClaudeSessionEntry[],
+  indices: number[],
+): ClientMessage[] {
+  return indices.map((index) => ({
+    ...(structuredClone(messages[index]) as unknown as ClientMessage),
+    isReplay: true,
+  }));
+}
+
+function runReconnectScenario(
+  steps: Array<
+    | { source: "jsonl"; messages: ClientMessage[] }
+    | { source: "stream"; messages: ClientMessage[] }
+  >,
+) {
+  let state: ClientMessage[] = [];
+
+  for (const step of steps) {
+    if (step.source === "jsonl") {
+      state = mergeJSONLMessages(state, step.messages).messages;
+      continue;
+    }
+
+    for (const message of step.messages) {
+      state = mergeStreamMessage(state, message).messages;
+    }
+  }
+
+  return normalizeRenderItemsForComparison(preprocessMessages(state));
 }
 
 const EDIT_DIFF = [
@@ -428,6 +473,246 @@ const CLAUDE_EDIT_CHAIN_FIXTURE: ClaudeSessionEntry[] = [
   },
 ];
 
+const CLAUDE_SESSION_2E582BFB_FIXTURE: ClaudeSessionEntry[] = [
+  {
+    type: "user",
+    uuid: "e416e5ea-2d96-46eb-836a-e7e0f8c79f00",
+    parentUuid: null,
+    message: { role: "user", content: "test session abc 123" },
+  },
+  {
+    type: "assistant",
+    uuid: "8a1ddf40-3ab7-4520-b1ab-3c0bc3447028",
+    parentUuid: "e416e5ea-2d96-46eb-836a-e7e0f8c79f00",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "thinking",
+          thinking:
+            'The user said "test session abc 123" - this seems like a test message. I will respond simply.',
+        },
+      ],
+    },
+  },
+  {
+    type: "assistant",
+    uuid: "31163611-077b-489a-b12f-de7864927631",
+    parentUuid: "e416e5ea-2d96-46eb-836a-e7e0f8c79f00",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: "Got it — looks like a test message. Everything's working. What can I help you with?",
+        },
+      ],
+    },
+  },
+  {
+    type: "user",
+    uuid: "5ab134ec-de5a-421e-a259-23ddc980b145",
+    parentUuid: "31163611-077b-489a-b12f-de7864927631",
+    message: { role: "user", content: "read claude.md" },
+  },
+  {
+    type: "assistant",
+    uuid: "85dfc3d9-26b0-4ca0-84ad-883b9e49a804",
+    parentUuid: "5ab134ec-de5a-421e-a259-23ddc980b145",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "thinking",
+          thinking: "The user wants me to read the CLAUDE.md file.",
+        },
+      ],
+    },
+  },
+  {
+    type: "assistant",
+    uuid: "6f74c169-29ed-4c04-bc47-ed14a8e67259",
+    parentUuid: "5ab134ec-de5a-421e-a259-23ddc980b145",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_01F85BCXN9KXiBR8uZJzVKCe",
+          name: "Read",
+          input: { file_path: "/Users/kgraehl/code/yepanywhere/CLAUDE.md" },
+          caller: { type: "direct" },
+        },
+      ],
+    },
+  },
+  {
+    type: "user",
+    uuid: "f03026c2-5ee3-46fc-92d6-610d110de974",
+    parentUuid: "6f74c169-29ed-4c04-bc47-ed14a8e67259",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "toolu_01F85BCXN9KXiBR8uZJzVKCe",
+          content:
+            "     1→# Yep Anywhere\n     2→...\n   328→- **Type discrimination**: Use `type` field (user/assistant/system/summary)\n",
+        },
+      ],
+    },
+    toolUseResult: {
+      type: "text",
+      file: {
+        filePath: "/Users/kgraehl/code/yepanywhere/CLAUDE.md",
+        content:
+          "# Yep Anywhere\n...\n- **Type discrimination**: Use `type` field (user/assistant/system/summary)\n",
+        numLines: 328,
+        startLine: 1,
+        totalLines: 328,
+      },
+    },
+  },
+  {
+    type: "assistant",
+    uuid: "a8eee3db-83a3-4907-9ba8-1634ab489abc",
+    parentUuid: "f03026c2-5ee3-46fc-92d6-610d110de974",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: "There it is — the full `CLAUDE.md` for Yep Anywhere (328 lines). It covers:\n\n- **Project overview** — mobile-first Claude Code supervisor\n- **Architecture** — Hono server + React client + WebSocket",
+        },
+      ],
+    },
+  },
+];
+
+const CLAUDE_QUEUE_HISTORY_FIXTURE: ClaudeSessionEntry[] = [
+  {
+    type: "queue-operation",
+    operation: "enqueue",
+    timestamp: "2026-03-28T12:12:01.573Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+    content:
+      "i want to test a session where i speak out of turn (while you're busy doing stuff). to that end please run a sleep 20 command (so you sleep for 20 seconds).",
+  },
+  {
+    type: "queue-operation",
+    operation: "dequeue",
+    timestamp: "2026-03-28T12:12:01.575Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+  },
+  {
+    type: "user",
+    uuid: "dc898006-83a5-499b-8a75-5d9a0f68edf7",
+    parentUuid: null,
+    message: {
+      role: "user",
+      content:
+        "i want to test a session where i speak out of turn (while you're busy doing stuff). to that end please run a sleep 20 command (so you sleep for 20 seconds).",
+    },
+  },
+  {
+    type: "assistant",
+    uuid: "c7ad881f-9db6-4667-b94b-278de0bcbccf",
+    parentUuid: "dc898006-83a5-499b-8a75-5d9a0f68edf7",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_01AZiGYyNYXrGVAiThf1DGGA",
+          name: "Bash",
+          input: {
+            command: "sleep 20",
+            description: "Sleep for 20 seconds",
+            timeout: 30000,
+          },
+          caller: { type: "direct" },
+        },
+      ],
+    },
+  },
+  {
+    type: "queue-operation",
+    operation: "enqueue",
+    timestamp: "2026-03-28T12:12:10.002Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+    content: "i'm talking out of turn!",
+  },
+  {
+    type: "queue-operation",
+    operation: "enqueue",
+    timestamp: "2026-03-28T12:12:14.115Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+    content: "saying a second thing out of turn",
+  },
+  {
+    type: "queue-operation",
+    operation: "enqueue",
+    timestamp: "2026-03-28T12:12:17.757Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+    content: "saying a third thing out of turn",
+  },
+  {
+    type: "user",
+    uuid: "a53067e7-43e7-402a-a722-6db37fbde377",
+    parentUuid: "c7ad881f-9db6-4667-b94b-278de0bcbccf",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "toolu_01AZiGYyNYXrGVAiThf1DGGA",
+          content: "(Bash completed with no output)",
+          is_error: false,
+        },
+      ],
+    },
+    toolUseResult: {
+      stdout: "",
+      stderr: "",
+      interrupted: false,
+      isImage: false,
+      noOutputExpected: false,
+    },
+  },
+  {
+    type: "queue-operation",
+    operation: "remove",
+    timestamp: "2026-03-28T12:12:27.772Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+  },
+  {
+    type: "queue-operation",
+    operation: "remove",
+    timestamp: "2026-03-28T12:12:27.772Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+  },
+  {
+    type: "queue-operation",
+    operation: "remove",
+    timestamp: "2026-03-28T12:12:27.772Z",
+    sessionId: "9269d1e3-2bcf-4b90-b287-a4bd43981baa",
+  },
+  {
+    type: "assistant",
+    uuid: "0c6a9d84-9d56-4e04-b83c-37b942bb7978",
+    parentUuid: "a53067e7-43e7-402a-a722-6db37fbde377",
+    message: {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: "Done sleeping. I see you sent three messages while I was busy:\n\n1. \"i'm talking out of turn!\"\n2. \"saying a second thing out of turn\"\n3. \"saying a third thing out of turn\"\n\nAll received. How did the out-of-turn experience look on your end?",
+        },
+      ],
+    },
+  },
+];
+
 describe("Render Parity Harness", () => {
   it("keeps Codex stream and persisted rendering equivalent", async () => {
     const persisted = await runPersistedPipeline(
@@ -530,5 +815,145 @@ describe("Render Parity Harness", () => {
     );
 
     expect(editCalls).toHaveLength(2);
+  });
+
+  it("renders session 2e582bfb in stable persisted order", async () => {
+    const persisted = await runPersistedPipeline(
+      buildLoadedClaudeSession(CLAUDE_SESSION_2E582BFB_FIXTURE),
+    );
+
+    const comparable = normalizeRenderItemsForComparison(
+      persisted.renderItems,
+    ) as Array<Record<string, unknown>>;
+
+    expect(
+      comparable.map((item) =>
+        item.type === "tool_call"
+          ? `${item.type}:${item.toolName}:${item.status}`
+          : String(item.type),
+      ),
+    ).toEqual([
+      "user_prompt",
+      "text",
+      "user_prompt",
+      "tool_call:Read:complete",
+      "text",
+    ]);
+
+    expect(comparable[0]).toMatchObject({
+      type: "user_prompt",
+      content: "test session abc 123",
+    });
+    expect(comparable[1]).toMatchObject({
+      type: "text",
+      text: "Got it — looks like a test message. Everything's working. What can I help you with?",
+    });
+    expect(comparable[2]).toMatchObject({
+      type: "user_prompt",
+      content: "read claude.md",
+    });
+    expect(comparable[3]).toMatchObject({
+      type: "tool_call",
+      toolName: "Read",
+      status: "complete",
+      toolResult: {
+        isError: false,
+        structured: {
+          type: "text",
+          file: {
+            filePath: "/Users/kgraehl/code/yepanywhere/CLAUDE.md",
+            numLines: 328,
+          },
+        },
+      },
+    });
+    expect(comparable[4]).toMatchObject({
+      type: "text",
+      text: "There it is — the full `CLAUDE.md` for Yep Anywhere (328 lines). It covers:\n\n- **Project overview** — mobile-first Claude Code supervisor\n- **Architecture** — Hono server + React client + WebSocket",
+    });
+  });
+
+  it("keeps reconnect replay order convergent for session 2e582bfb", () => {
+    const authoritativeMessages = normalizeClaudeMessages(
+      CLAUDE_SESSION_2E582BFB_FIXTURE,
+    );
+    const expected = normalizeRenderItemsForComparison(
+      preprocessMessages(authoritativeMessages),
+    );
+
+    const replayOutOfOrder = buildReplayMessages(
+      CLAUDE_SESSION_2E582BFB_FIXTURE,
+      [1, 2, 0, 5, 7, 6, 3, 4],
+    );
+    const replaySecondTurnFirst = buildReplayMessages(
+      CLAUDE_SESSION_2E582BFB_FIXTURE,
+      [4, 5, 6, 7, 1, 2],
+    );
+
+    const firstTurnJsonl = authoritativeMessages.slice(0, 2);
+    const secondTurnJsonl = authoritativeMessages.slice(2);
+
+    const scenarios = [
+      runReconnectScenario([
+        { source: "stream", messages: replayOutOfOrder },
+        { source: "jsonl", messages: authoritativeMessages },
+      ]),
+      runReconnectScenario([
+        { source: "jsonl", messages: authoritativeMessages },
+        { source: "stream", messages: replayOutOfOrder },
+        { source: "jsonl", messages: authoritativeMessages },
+      ]),
+      runReconnectScenario([
+        { source: "jsonl", messages: firstTurnJsonl },
+        { source: "stream", messages: replaySecondTurnFirst },
+        { source: "jsonl", messages: secondTurnJsonl },
+        { source: "stream", messages: buildReplayMessages(
+            CLAUDE_SESSION_2E582BFB_FIXTURE,
+            [1, 2],
+          ) },
+      ]),
+    ];
+
+    for (const scenario of scenarios) {
+      expect(scenario).toEqual(expected);
+    }
+  });
+
+  it("renders removed queued Claude prompts during persisted load", async () => {
+    const persisted = await runPersistedPipeline(
+      buildLoadedClaudeSession(CLAUDE_QUEUE_HISTORY_FIXTURE),
+    );
+
+    const comparable = normalizeRenderItemsForComparison(
+      persisted.renderItems,
+    ) as Array<Record<string, unknown>>;
+
+    expect(
+      comparable.map((item) =>
+        item.type === "tool_call"
+          ? `${item.type}:${item.toolName}:${item.status}`
+          : String(item.type),
+      ),
+    ).toEqual([
+      "user_prompt",
+      "tool_call:Bash:complete",
+      "user_prompt",
+      "user_prompt",
+      "user_prompt",
+      "text",
+    ]);
+
+    expect(comparable[2]).toMatchObject({
+      type: "user_prompt",
+      content: "i'm talking out of turn!",
+    });
+    expect(comparable[3]).toMatchObject({
+      type: "user_prompt",
+      content: "saying a second thing out of turn",
+    });
+    expect(comparable[4]).toMatchObject({
+      type: "user_prompt",
+      content: "saying a third thing out of turn",
+    });
   });
 });

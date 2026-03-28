@@ -44,6 +44,43 @@ interface CodexToolUseConversion {
   context: CodexToolCallContext;
 }
 
+function normalizeClaudeQueueOperationContent(content: unknown): string {
+  if (content === undefined) {
+    return "";
+  }
+
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+
+      if (!item || typeof item !== "object") {
+        return "";
+      }
+
+      const type = (item as { type?: unknown }).type;
+      if (type === "text") {
+        const text = (item as { text?: unknown }).text;
+        return typeof text === "string" ? text : "";
+      }
+      if (type === "image") return "[Image]";
+      if (type === "document") return "[Document]";
+      if (type === "tool_result") return "[Tool Result]";
+
+      return "";
+    })
+    .join("\n");
+}
+
 /**
  * Normalize a UnifiedSession into the generic Session format expected by the frontend.
  */
@@ -91,6 +128,25 @@ function convertClaudeMessage(
   _index: number,
   orphanedToolUses: Set<string>,
 ): Message {
+  if (raw.type === "queue-operation" && raw.operation === "enqueue") {
+    const content = normalizeClaudeQueueOperationContent(raw.content).trim();
+    const rawAny = raw as Record<string, unknown>;
+
+    return {
+      ...rawAny,
+      id: `queue-operation-${_index}-${raw.timestamp}`,
+      type: "user",
+      role: "user",
+      content,
+      message: {
+        role: "user",
+        content,
+      },
+      deferred: true,
+      deferredSource: "queue-operation",
+    };
+  }
+
   // Normalize content blocks - pass through all fields
   let content: string | ContentBlock[] | undefined;
   const rawContent = getMessageContent(raw);

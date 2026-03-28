@@ -16,6 +16,53 @@ interface NormalizeClaudeEntriesOptions {
   includeOrphans?: boolean;
 }
 
+function hasQueueOperationContent(raw: ClaudeSessionEntry): boolean {
+  if (raw.type !== "queue-operation" || raw.operation !== "enqueue") {
+    return false;
+  }
+
+  if (typeof raw.content === "string") {
+    return raw.content.trim().length > 0;
+  }
+
+  return Array.isArray(raw.content) && raw.content.length > 0;
+}
+
+function collectHistoricalQueueEntries(
+  rawMessages: ClaudeSessionEntry[],
+): Array<{ lineIndex: number; raw: ClaudeSessionEntry }> {
+  const pendingEnqueues: Array<{ lineIndex: number; raw: ClaudeSessionEntry }> =
+    [];
+  const historicalEntries: Array<{
+    lineIndex: number;
+    raw: ClaudeSessionEntry;
+  }> = [];
+
+  for (let lineIndex = 0; lineIndex < rawMessages.length; lineIndex++) {
+    const raw = rawMessages[lineIndex];
+    if (raw?.type !== "queue-operation") continue;
+
+    if (raw.operation === "enqueue") {
+      if (hasQueueOperationContent(raw)) {
+        pendingEnqueues.push({ lineIndex, raw });
+      }
+      continue;
+    }
+
+    if (
+      (raw.operation === "dequeue" || raw.operation === "remove") &&
+      pendingEnqueues.length > 0
+    ) {
+      const nextEntry = pendingEnqueues.shift();
+      if (raw.operation === "remove" && nextEntry) {
+        historicalEntries.push(nextEntry);
+      }
+    }
+  }
+
+  return historicalEntries;
+}
+
 export function collectVisibleClaudeEntries(
   rawMessages: ClaudeSessionEntry[],
   options: NormalizeClaudeEntriesOptions = {},
@@ -74,27 +121,40 @@ export function collectVisibleClaudeEntries(
     extras.sort((left, right) => left.lineIndex - right.lineIndex);
   }
 
-  const entries: ClaudeSessionEntry[] = [];
+  const entries: Array<{ lineIndex: number; raw: ClaudeSessionEntry }> = [];
   const includedUuids = new Set<string>();
-  const pushUnique = (raw: ClaudeSessionEntry) => {
+  const includedNonUuidLineIndices = new Set<number>();
+  const pushUnique = (raw: ClaudeSessionEntry, lineIndex: number) => {
     const uuid = "uuid" in raw ? raw.uuid : undefined;
     if (uuid) {
       if (includedUuids.has(uuid)) return;
       includedUuids.add(uuid);
+    } else {
+      if (includedNonUuidLineIndices.has(lineIndex)) return;
+      includedNonUuidLineIndices.add(lineIndex);
     }
-    entries.push(raw);
+    entries.push({ lineIndex, raw });
   };
 
   for (const node of activeBranch) {
-    pushUnique(node.raw);
+    pushUnique(node.raw, node.lineIndex);
 
     const extras = extrasByParent.get(node.uuid);
     if (!extras) continue;
 
     for (const extra of extras) {
-      pushUnique(extra.raw);
+      pushUnique(extra.raw, extra.lineIndex);
     }
   }
 
-  return { entries, orphanedToolUses };
+  for (const queuedEntry of collectHistoricalQueueEntries(rawMessages)) {
+    pushUnique(queuedEntry.raw, queuedEntry.lineIndex);
+  }
+
+  entries.sort((left, right) => left.lineIndex - right.lineIndex);
+
+  return {
+    entries: entries.map((entry) => entry.raw),
+    orphanedToolUses,
+  };
 }

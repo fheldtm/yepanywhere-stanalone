@@ -328,4 +328,166 @@ describe("normalizeSession", () => {
     expect(toolResultIds).toContain("task-2-id");
     expect(toolResultIds).toContain("task-3-id");
   });
+
+  it("reconstructs removed queued prompts as persisted user messages", () => {
+    const rawMessages: ClaudeSessionEntry[] = [
+      {
+        type: "queue-operation",
+        operation: "enqueue",
+        timestamp: "2026-03-28T12:12:01.573Z",
+        sessionId: "queue-history-session",
+        content:
+          "i want to test a session where i speak out of turn (while you're busy doing stuff). to that end please run a sleep 20 command (so you sleep for 20 seconds).",
+      },
+      {
+        type: "queue-operation",
+        operation: "dequeue",
+        timestamp: "2026-03-28T12:12:01.575Z",
+        sessionId: "queue-history-session",
+      },
+      {
+        type: "user",
+        uuid: "user-1",
+        parentUuid: null,
+        message: {
+          role: "user",
+          content:
+            "i want to test a session where i speak out of turn (while you're busy doing stuff). to that end please run a sleep 20 command (so you sleep for 20 seconds).",
+        },
+      },
+      {
+        type: "assistant",
+        uuid: "assistant-1",
+        parentUuid: "user-1",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "bash-sleep",
+              name: "Bash",
+              input: { command: "sleep 20" },
+            },
+          ],
+        },
+      },
+      {
+        type: "queue-operation",
+        operation: "enqueue",
+        timestamp: "2026-03-28T12:12:10.002Z",
+        sessionId: "queue-history-session",
+        content: "i'm talking out of turn!",
+      },
+      {
+        type: "queue-operation",
+        operation: "enqueue",
+        timestamp: "2026-03-28T12:12:14.115Z",
+        sessionId: "queue-history-session",
+        content: "saying a second thing out of turn",
+      },
+      {
+        type: "queue-operation",
+        operation: "enqueue",
+        timestamp: "2026-03-28T12:12:17.757Z",
+        sessionId: "queue-history-session",
+        content: "saying a third thing out of turn",
+      },
+      {
+        type: "user",
+        uuid: "tool-result-1",
+        parentUuid: "assistant-1",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "bash-sleep",
+              content: "(Bash completed with no output)",
+            },
+          ],
+        },
+      },
+      {
+        type: "queue-operation",
+        operation: "remove",
+        timestamp: "2026-03-28T12:12:27.772Z",
+        sessionId: "queue-history-session",
+      },
+      {
+        type: "queue-operation",
+        operation: "remove",
+        timestamp: "2026-03-28T12:12:27.773Z",
+        sessionId: "queue-history-session",
+      },
+      {
+        type: "queue-operation",
+        operation: "remove",
+        timestamp: "2026-03-28T12:12:27.774Z",
+        sessionId: "queue-history-session",
+      },
+      {
+        type: "assistant",
+        uuid: "assistant-2",
+        parentUuid: "tool-result-1",
+        message: {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "Done sleeping. I saw the queued messages.",
+            },
+          ],
+        },
+      },
+    ];
+
+    const mockSession: LoadedSession = {
+      summary: {
+        id: "queue-history-session",
+        projectId: "test-project" as UrlProjectId,
+        title: "Queue history session",
+        fullTitle: "Queue history session",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messageCount: rawMessages.length,
+        status: { state: "idle" },
+        provider: "claude",
+      },
+      data: {
+        provider: "claude",
+        session: {
+          messages: rawMessages,
+        },
+      } as UnifiedSession,
+    };
+
+    const normalized = normalizeSession(mockSession);
+    const visibleUserMessages = normalized.messages
+      .filter((message) => message.type === "user")
+      .map((message) => message.message?.content);
+
+    expect(visibleUserMessages).toEqual([
+      "i want to test a session where i speak out of turn (while you're busy doing stuff). to that end please run a sleep 20 command (so you sleep for 20 seconds).",
+      "i'm talking out of turn!",
+      "saying a second thing out of turn",
+      "saying a third thing out of turn",
+      [
+        {
+          type: "tool_result",
+          tool_use_id: "bash-sleep",
+          content: "(Bash completed with no output)",
+        },
+      ],
+    ]);
+
+    expect(
+      normalized.messages
+        .filter((message) => message.deferred === true)
+        .map((message) => message.message?.content),
+    ).toEqual([
+      "i'm talking out of turn!",
+      "saying a second thing out of turn",
+      "saying a third thing out of turn",
+    ]);
+  });
 });

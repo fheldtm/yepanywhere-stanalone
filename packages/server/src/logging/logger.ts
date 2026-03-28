@@ -32,25 +32,30 @@ export interface LogConfig {
   prettyPrint: boolean;
 }
 
-const defaultConfig: LogConfig = {
-  logDir: path.join(os.homedir(), ".yep-anywhere", "logs"),
-  logFile: "server.log",
-  consoleLevel: (process.env.LOG_LEVEL as LogLevel) || "info",
-  fileLevel:
-    (process.env.LOG_FILE_LEVEL as LogLevel) ||
-    (process.env.LOG_LEVEL as LogLevel) ||
-    "info",
-  logToFile: true,
-  prettyPrint: !["false", "0", "no", "off"].includes(
-    (process.env.LOG_PRETTY ?? "").toLowerCase(),
-  ),
-};
+function getDefaultConfig(): LogConfig {
+  return {
+    logDir:
+      process.env.LOG_DIR ?? path.join(os.homedir(), ".yep-anywhere", "logs"),
+    logFile: process.env.LOG_FILE ?? "server.log",
+    consoleLevel: (process.env.LOG_LEVEL as LogLevel) || "info",
+    fileLevel:
+      (process.env.LOG_FILE_LEVEL as LogLevel) ||
+      (process.env.LOG_LEVEL as LogLevel) ||
+      "info",
+    // Auto-init logger stays console-only. The real server startup path calls
+    // initLogger(loadConfig()), so configured file logging still works there.
+    logToFile: false,
+    prettyPrint: !["false", "0", "no", "off"].includes(
+      (process.env.LOG_PRETTY ?? "").toLowerCase(),
+    ),
+  };
+}
 
 let logger: pino.Logger | null = null;
 /** Current console log level (for dynamic adjustment) */
-let currentConsoleLevel: LogLevel = defaultConfig.consoleLevel;
+let currentConsoleLevel: LogLevel = getDefaultConfig().consoleLevel;
 /** Current file log level (for dynamic adjustment) */
-let currentFileLevel: LogLevel = defaultConfig.fileLevel;
+let currentFileLevel: LogLevel = getDefaultConfig().fileLevel;
 /** Multistream instance (needed for dynamic level changes) */
 let multistream: pino.MultiStreamRes | null = null;
 let originalConsole: {
@@ -66,16 +71,12 @@ let originalConsole: {
  * This should be called once at server startup.
  */
 export function initLogger(config: Partial<LogConfig> = {}): pino.Logger {
-  const finalConfig = { ...defaultConfig, ...config };
+  const finalConfig = { ...getDefaultConfig(), ...config };
+  let fileLoggingInitError: Error | null = null;
 
   // Store current levels
   currentConsoleLevel = finalConfig.consoleLevel;
   currentFileLevel = finalConfig.fileLevel;
-
-  // Ensure log directory exists
-  if (finalConfig.logToFile) {
-    fs.mkdirSync(finalConfig.logDir, { recursive: true });
-  }
 
   const streams: pino.StreamEntry[] = [];
 
@@ -102,12 +103,24 @@ export function initLogger(config: Partial<LogConfig> = {}): pino.Logger {
 
   // File stream
   if (finalConfig.logToFile) {
-    const logPath = path.join(finalConfig.logDir, finalConfig.logFile);
-    const fileStream = fs.createWriteStream(logPath, { flags: "a" });
-    streams.push({
-      stream: fileStream,
-      level: finalConfig.fileLevel as pino.Level,
-    });
+    try {
+      fs.mkdirSync(finalConfig.logDir, { recursive: true });
+      const logPath = path.join(finalConfig.logDir, finalConfig.logFile);
+      const fileStream = fs.createWriteStream(logPath, { flags: "a" });
+      fileStream.on("error", (err) => {
+        const error = err instanceof Error ? err : new Error(String(err));
+        process.stderr.write(
+          `[logger] Failed to write log file ${logPath}: ${error.message}\n`,
+        );
+      });
+      streams.push({
+        stream: fileStream,
+        level: finalConfig.fileLevel as pino.Level,
+      });
+    } catch (err) {
+      fileLoggingInitError =
+        err instanceof Error ? err : new Error(String(err));
+    }
   }
 
   // Determine minimum level across all streams (pino needs base level <= stream levels)
@@ -123,6 +136,13 @@ export function initLogger(config: Partial<LogConfig> = {}): pino.Logger {
   } else {
     multistream = pino.multistream(streams);
     logger = pino({ level: minLevel }, multistream);
+  }
+
+  if (fileLoggingInitError) {
+    logger.warn(
+      { err: fileLoggingInitError, logDir: finalConfig.logDir },
+      "Failed to initialize file logging; continuing with console-only logger",
+    );
   }
 
   return logger;
@@ -233,7 +253,7 @@ function formatConsoleArgs(args: unknown[]): string {
  * Get the path to the current log file.
  */
 export function getLogFilePath(config: Partial<LogConfig> = {}): string {
-  const finalConfig = { ...defaultConfig, ...config };
+  const finalConfig = { ...getDefaultConfig(), ...config };
   return path.join(finalConfig.logDir, finalConfig.logFile);
 }
 
@@ -241,7 +261,7 @@ export function getLogFilePath(config: Partial<LogConfig> = {}): string {
  * Get the log directory path.
  */
 export function getLogDir(config: Partial<LogConfig> = {}): string {
-  const finalConfig = { ...defaultConfig, ...config };
+  const finalConfig = { ...getDefaultConfig(), ...config };
   return finalConfig.logDir;
 }
 

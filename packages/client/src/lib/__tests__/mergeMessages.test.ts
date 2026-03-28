@@ -297,6 +297,68 @@ describe("mergeJSONLMessages", () => {
         "user-2",
       ]);
     });
+
+    it("prunes sdk-only Claude sibling messages when authoritative JSONL arrives", () => {
+      const existing: Message[] = [
+        {
+          id: "user-1",
+          uuid: "user-1",
+          type: "user",
+          message: { role: "user", content: "hello" },
+          parentUuid: null,
+          _source: "sdk",
+        },
+        {
+          id: "thinking-1",
+          uuid: "thinking-1",
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "internal" }],
+          },
+          parentUuid: "user-1",
+          _source: "sdk",
+        },
+        {
+          id: "final-1",
+          uuid: "final-1",
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "done" }],
+          },
+          parentUuid: "user-1",
+          _source: "sdk",
+        },
+      ];
+      const incoming: Message[] = [
+        {
+          id: "user-1",
+          uuid: "user-1",
+          type: "user",
+          message: { role: "user", content: "hello" },
+          parentUuid: null,
+        },
+        {
+          id: "final-1",
+          uuid: "final-1",
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "done" }],
+          },
+          parentUuid: "user-1",
+        },
+      ];
+
+      const result = mergeJSONLMessages(existing, incoming);
+
+      expect(result.messages.map((m) => m.uuid ?? m.id)).toEqual([
+        "user-1",
+        "final-1",
+      ]);
+      expect(result.messages[1]?._source).toBe("jsonl");
+    });
   });
 });
 
@@ -354,6 +416,46 @@ describe("mergeStreamMessage", () => {
       expect(result.messages[0]?.id).toBe("msg-1");
       expect(result.messages[1]?.id).toBe("msg-2");
       expect(result.messages[2]?.id).toBe("msg-3");
+    });
+
+    it("suppresses replay-only Claude siblings when authoritative JSONL already exists", () => {
+      const existing: Message[] = [
+        {
+          id: "user-1",
+          uuid: "user-1",
+          type: "user",
+          message: { role: "user", content: "hello" },
+          parentUuid: null,
+          _source: "jsonl",
+        },
+        {
+          id: "final-1",
+          uuid: "final-1",
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "done" }],
+          },
+          parentUuid: "user-1",
+          _source: "jsonl",
+        },
+      ];
+      const incoming: Message = {
+        id: "thinking-1",
+        uuid: "thinking-1",
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "thinking", thinking: "internal" }],
+        },
+        parentUuid: "user-1",
+        isReplay: true,
+      };
+
+      const result = mergeStreamMessage(existing, incoming);
+
+      expect(result.messages).toBe(existing);
+      expect(result.index).toBe(-1);
     });
   });
 
