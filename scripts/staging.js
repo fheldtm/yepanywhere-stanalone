@@ -20,9 +20,12 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitIfUnsafeHome } from "./safe-home.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
+
+exitIfUnsafeHome({ entrypoint: "pnpm staging" });
 
 const port = process.env.PORT ? Number.parseInt(process.env.PORT, 10) : 3000;
 const astroPort = port + 10; // Internal Astro dev port (not exposed directly)

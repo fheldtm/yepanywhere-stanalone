@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "prepare-sidecar": "bash scripts/prepare-sidecar.sh",
-    "dev": "vite",
+    "dev": "node ../../scripts/run-with-safe-home.js vite",
     "build": "tsc && vite build",
     "tauri": "pnpm prepare-sidecar && tauri"
   },

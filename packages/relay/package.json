@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx --conditions source src/index.ts",
-    "dev:watch": "tsx watch --conditions source src/index.ts < /dev/null",
+    "dev": "node ../../scripts/run-with-safe-home.js tsx --conditions source src/index.ts",
+    "dev:watch": "node ../../scripts/run-with-safe-home.js --stdin-null tsx watch --conditions source src/index.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "node ../../scripts/run-with-safe-home.js vitest run"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.9",

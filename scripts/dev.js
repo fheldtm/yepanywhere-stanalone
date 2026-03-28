@@ -18,10 +18,13 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitIfUnsafeHome } from "./safe-home.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
 const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+exitIfUnsafeHome({ entrypoint: "pnpm dev" });
 
 function isSuppressedViteBannerLine(line) {
   return (
