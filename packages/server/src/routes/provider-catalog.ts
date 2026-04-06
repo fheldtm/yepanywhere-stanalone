@@ -1,5 +1,6 @@
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import type { GeminiSessionScanner } from "../projects/gemini-scanner.js";
+import { canonicalizeProjectPath } from "../projects/paths.js";
 
 export interface ProviderCatalogDeps {
   codexScanner?: CodexSessionScanner;
@@ -25,10 +26,12 @@ export async function buildProviderProjectCatalog(
   ]);
 
   return {
-    codexPaths: new Set(codexProjects.map((project) => project.path)),
+    codexPaths: new Set(
+      codexProjects.map((project) => canonicalizeProjectPath(project.path)),
+    ),
     geminiPaths: new Set(
       geminiProjects
-        .map((project) => project.path)
+        .map((project) => canonicalizeProjectPath(project.path))
         .filter((path) => !path.startsWith("gemini:")),
     ),
     geminiHashToCwd: deps.geminiScanner?.getHashToCwd(),

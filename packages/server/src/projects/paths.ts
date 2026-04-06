@@ -114,6 +114,21 @@ export function getProjectName(projectPath: string): string {
 }
 
 /**
+ * Canonicalize a project path for identity comparisons.
+ *
+ * This keeps the path semantically the same while normalizing Windows-only
+ * variations that otherwise create duplicate project records:
+ * - backslashes vs forward slashes
+ * - lowercase vs uppercase drive letters
+ */
+export function canonicalizeProjectPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.replace(/^([a-z]):/, (_match, drive: string) => {
+    return `${drive.toUpperCase()}:`;
+  });
+}
+
+/**
  * Normalize a project path for cross-machine deduplication.
  *
  * Strips OS-specific home directory prefixes so the same project
@@ -126,8 +141,7 @@ export function getProjectName(projectPath: string): string {
  * normalizeProjectPathForDedup("/opt/shared/project")      // => "/opt/shared/project"
  */
 export function normalizeProjectPathForDedup(path: string): string {
-  // Normalize to forward slashes for cross-platform matching
-  const normalized = path.replace(/\\/g, "/");
+  const normalized = canonicalizeProjectPath(path);
   // Unix: /Users/kgraehl/dotfiles or /home/kgraehl/dotfiles
   const unixMatch = normalized.match(/^\/(?:Users|home)\/(.+)$/);
   if (unixMatch?.[1]) return unixMatch[1];
@@ -136,7 +150,7 @@ export function normalizeProjectPathForDedup(path: string): string {
   if (winMatch?.[1]) return winMatch[1];
   const rootMatch = normalized.match(/^\/root\/(.+)$/);
   if (rootMatch?.[1]) return `root/${rootMatch[1]}`;
-  return path;
+  return normalized;
 }
 
 /**

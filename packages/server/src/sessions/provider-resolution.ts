@@ -1,5 +1,6 @@
 import type { ProviderName, UrlProjectId } from "@yep-anywhere/shared";
 import type { ISessionIndexService } from "../indexes/types.js";
+import { canonicalizeProjectPath } from "../projects/paths.js";
 import type { Project, SessionSummary } from "../supervisor/types.js";
 import { CodexSessionReader } from "./codex-reader.js";
 import { GeminiSessionReader } from "./gemini-reader.js";
@@ -52,7 +53,7 @@ function mayHaveCodexSessions(
   catalog?: ProviderProjectCatalog,
 ): boolean {
   if (catalog) {
-    return catalog.codexPaths.has(project.path);
+    return catalog.codexPaths.has(canonicalizeProjectPath(project.path));
   }
   return normalizeProviderGroup(project.provider) === "claude";
 }
@@ -62,7 +63,7 @@ function mayHaveGeminiSessions(
   catalog?: ProviderProjectCatalog,
 ): boolean {
   if (catalog) {
-    return catalog.geminiPaths.has(project.path);
+    return catalog.geminiPaths.has(canonicalizeProjectPath(project.path));
   }
   const provider = normalizeProviderGroup(project.provider);
   return provider === "claude" || provider === "codex";

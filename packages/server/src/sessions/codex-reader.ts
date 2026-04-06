@@ -29,6 +29,7 @@ import {
   getModelContextWindow,
   parseCodexSessionEntry,
 } from "@yep-anywhere/shared";
+import { canonicalizeProjectPath } from "../projects/paths.js";
 import type {
   ContentBlock,
   ContextUsage,
@@ -85,7 +86,9 @@ export class CodexSessionReader implements ISessionReader {
 
   constructor(options: CodexSessionReaderOptions) {
     this.sessionsDir = options.sessionsDir;
-    this.projectPath = options.projectPath;
+    this.projectPath = options.projectPath
+      ? canonicalizeProjectPath(options.projectPath)
+      : undefined;
   }
 
   invalidateCache(): void {
@@ -99,7 +102,10 @@ export class CodexSessionReader implements ISessionReader {
 
     for (const session of sessions) {
       // Filter by project path if set
-      if (this.projectPath && session.cwd !== this.projectPath) {
+      if (
+        this.projectPath &&
+        canonicalizeProjectPath(session.cwd) !== this.projectPath
+      ) {
         continue;
       }
 

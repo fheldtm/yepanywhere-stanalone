@@ -13,6 +13,7 @@ import { CODEX_SESSIONS_DIR, CodexSessionScanner } from "./codex-scanner.js";
 import { GEMINI_TMP_DIR, GeminiSessionScanner } from "./gemini-scanner.js";
 import {
   CLAUDE_PROJECTS_DIR,
+  canonicalizeProjectPath,
   decodeProjectId,
   encodeProjectId,
   isAbsolutePath,
@@ -218,10 +219,7 @@ export class ProjectScanner {
       sessionCount: number,
       lastActivity: string | null,
     ) => {
-      // Normalize slashes so Windows mixed-slash cwds
-      // (e.g. "C:\Users\sox/Documents/webvam" vs "C:\Users\sox\Documents\webvam")
-      // are recognized as the same path.
-      const projectPath = rawProjectPath.replace(/\\/g, "/");
+      const projectPath = canonicalizeProjectPath(rawProjectPath);
       if (seenPaths.has(projectPath)) return; // exact path duplicate
       seenPaths.add(projectPath);
 
@@ -326,10 +324,16 @@ export class ProjectScanner {
     if (this.codexScanner) {
       const codexProjects = await this.codexScanner.listProjects();
       for (const codexProject of codexProjects) {
+        const projectPath = canonicalizeProjectPath(codexProject.path);
         // Skip if we've already seen this path from Claude
-        if (seenPaths.has(codexProject.path)) continue;
-        seenPaths.add(codexProject.path);
-        projects.push(codexProject);
+        if (seenPaths.has(projectPath)) continue;
+        seenPaths.add(projectPath);
+        projects.push({
+          ...codexProject,
+          id: encodeProjectId(projectPath),
+          path: projectPath,
+          name: basename(projectPath),
+        });
       }
     }
 
@@ -340,36 +344,43 @@ export class ProjectScanner {
 
       const geminiProjects = await this.geminiScanner.listProjects();
       for (const geminiProject of geminiProjects) {
+        const projectPath = canonicalizeProjectPath(geminiProject.path);
         // Skip if we've already seen this path from Claude/Codex
         // (Gemini projects with unknown hashes will have paths like "gemini:xxxxxxxx")
-        if (seenPaths.has(geminiProject.path)) continue;
-        seenPaths.add(geminiProject.path);
-        projects.push(geminiProject);
+        if (seenPaths.has(projectPath)) continue;
+        seenPaths.add(projectPath);
+        projects.push({
+          ...geminiProject,
+          id: encodeProjectId(projectPath),
+          path: projectPath,
+          name: basename(projectPath),
+        });
       }
     }
 
     // Merge manually added projects (from ProjectMetadataService)
     if (this.projectMetadataService) {
       const addedProjects = this.projectMetadataService.getAllProjects();
-      for (const [projectId, metadata] of Object.entries(addedProjects)) {
+      for (const metadata of Object.values(addedProjects)) {
+        const projectPath = canonicalizeProjectPath(metadata.path);
         // Skip if we've already seen this path from another source
-        if (seenPaths.has(metadata.path)) continue;
+        if (seenPaths.has(projectPath)) continue;
 
         // Verify the directory still exists
         try {
-          const stats = await stat(metadata.path);
+          const stats = await stat(projectPath);
           if (!stats.isDirectory()) continue;
         } catch {
           // Directory no longer exists, skip it
           continue;
         }
 
-        seenPaths.add(metadata.path);
-        const encodedPath = metadata.path.replace(/[/\\:]/g, "-");
+        seenPaths.add(projectPath);
+        const encodedPath = projectPath.replace(/[/\\:]/g, "-");
         projects.push({
-          id: projectId as UrlProjectId,
-          path: metadata.path,
-          name: basename(metadata.path),
+          id: encodeProjectId(projectPath),
+          path: projectPath,
+          name: basename(projectPath),
           sessionCount: 0,
           sessionDir: join(this.projectsDir, encodedPath),
           activeOwnedCount: 0,
@@ -417,16 +428,29 @@ export class ProjectScanner {
     projectId: string,
     preferredProvider?: "claude" | "codex" | "gemini",
   ): Promise<Project | null> {
+    let resolvedProjectId = projectId;
+
     // First check if project already exists
-    const existing = await this.getProject(projectId);
+    const existing = await this.getProject(resolvedProjectId);
     if (existing) return existing;
 
     // Decode the projectId to get the path
     let projectPath: string;
     try {
-      projectPath = decodeProjectId(projectId as UrlProjectId);
+      projectPath = decodeProjectId(resolvedProjectId as UrlProjectId);
     } catch {
       return null;
+    }
+
+    const canonicalProjectPath = canonicalizeProjectPath(projectPath);
+    if (canonicalProjectPath !== projectPath) {
+      const canonicalId = encodeProjectId(canonicalProjectPath);
+      const canonicalProject = await this.getProject(canonicalId);
+      if (canonicalProject) {
+        return canonicalProject;
+      }
+      projectPath = canonicalProjectPath;
+      resolvedProjectId = canonicalId;
     }
 
     // Validate path is absolute
@@ -481,7 +505,7 @@ export class ProjectScanner {
     }
 
     return {
-      id: projectId as UrlProjectId,
+      id: resolvedProjectId as UrlProjectId,
       path: projectPath,
       name: basename(projectPath),
       sessionCount: 0,

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  canonicalizeProjectPath,
   decodeProjectId,
   encodeProjectId,
   getFileTypeFromRelativePath,
@@ -147,6 +148,12 @@ describe("Project Path Utilities", () => {
   });
 
   describe("normalizeProjectPathForDedup", () => {
+    it("canonicalizes Windows separators before deduping", () => {
+      expect(canonicalizeProjectPath("c:\\Users\\pf\\Projects\\myapp")).toBe(
+        "C:/Users/pf/Projects/myapp",
+      );
+    });
+
     it("normalizes macOS home paths", () => {
       expect(normalizeProjectPathForDedup("/Users/kgraehl/dotfiles")).toBe(
         "kgraehl/dotfiles",
@@ -219,6 +226,13 @@ describe("Project Path Utilities", () => {
       const upper = normalizeProjectPathForDedup("C:\\Users\\user\\project");
       const lower = normalizeProjectPathForDedup("c:\\Users\\user\\project");
       expect(upper).toBe(lower);
+    });
+
+    it("normalizes non-home Windows paths to a stable separator format", () => {
+      const backslash = normalizeProjectPathForDedup("D:\\work\\repo");
+      const forwardSlash = normalizeProjectPathForDedup("d:/work/repo");
+      expect(backslash).toBe("D:/work/repo");
+      expect(backslash).toBe(forwardSlash);
     });
   });
 

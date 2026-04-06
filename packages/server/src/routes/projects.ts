@@ -9,7 +9,7 @@ import type {
 import type { NotificationService } from "../notifications/index.js";
 import type { CodexSessionScanner } from "../projects/codex-scanner.js";
 import type { GeminiSessionScanner } from "../projects/gemini-scanner.js";
-import { isAbsolutePath } from "../projects/paths.js";
+import { canonicalizeProjectPath, isAbsolutePath } from "../projects/paths.js";
 import type { ProjectScanner } from "../projects/scanner.js";
 import type { CodexSessionReader } from "../sessions/codex-reader.js";
 import type { GeminiSessionReader } from "../sessions/gemini-reader.js";
@@ -294,6 +294,7 @@ export function createProjectsRoutes(deps: ProjectsDeps): Hono {
     if (normalizedPath.length > 1 && /[/\\]$/.test(normalizedPath)) {
       normalizedPath = normalizedPath.slice(0, -1);
     }
+    normalizedPath = canonicalizeProjectPath(normalizedPath);
 
     // Validate path is absolute
     if (!isAbsolutePath(normalizedPath)) {

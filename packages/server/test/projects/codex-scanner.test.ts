@@ -89,6 +89,33 @@ describe("CodexSessionScanner", () => {
     expect(projectB?.sessionCount).toBe(1);
   });
 
+  it("deduplicates mixed-slash Windows cwd variants into one project", async () => {
+    const sessionsDir = join(tmpdir(), `codex-scan-${randomUUID()}`);
+    tempDirs.push(sessionsDir);
+
+    const dateDir = join(sessionsDir, "2026", "02", "03");
+    await mkdir(dateDir, { recursive: true });
+
+    const id1 = randomUUID();
+    const id2 = randomUUID();
+
+    await writeFile(
+      join(dateDir, `rollout-${id1}.jsonl`),
+      `${makeSessionMeta(id1, "C:\\Users\\kyle\\Documents\\webvam")}\n`,
+    );
+    await writeFile(
+      join(dateDir, `rollout-${id2}.jsonl`),
+      `${makeSessionMeta(id2, "c:/Users/kyle/Documents/webvam")}\n`,
+    );
+
+    const scanner = new CodexSessionScanner({ sessionsDir });
+    const projects = await scanner.listProjects();
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0].path).toBe("C:/Users/kyle/Documents/webvam");
+    expect(projects[0].sessionCount).toBe(2);
+  });
+
   it("parses session_meta with very large base_instructions over 64KB", async () => {
     const sessionsDir = join(tmpdir(), `codex-scan-${randomUUID()}`);
     tempDirs.push(sessionsDir);

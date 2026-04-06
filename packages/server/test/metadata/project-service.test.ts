@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ProjectMetadataService } from "../../src/metadata/ProjectMetadataService.js";
+import { encodeProjectId } from "../../src/projects/paths.js";
 
 describe("ProjectMetadataService", () => {
   let tempDir: string;
@@ -24,31 +25,73 @@ describe("ProjectMetadataService", () => {
     });
 
     it("loads existing state from disk", async () => {
+      const projectPath = "/test/path";
+      const projectId = encodeProjectId(projectPath);
       // Add a project
-      await service.addProject("test-id", "/test/path");
+      await service.addProject(projectId, projectPath);
 
       // Create a new service instance with the same data dir
       const newService = new ProjectMetadataService({ dataDir: tempDir });
       await newService.initialize();
 
       const projects = newService.getAllProjects();
-      expect(projects["test-id"]).toBeDefined();
-      expect(projects["test-id"].path).toBe("/test/path");
+      expect(projects[projectId]).toBeDefined();
+      expect(projects[projectId].path).toBe(projectPath);
+    });
+
+    it("canonicalizes and deduplicates mixed-slash Windows project metadata", async () => {
+      await fs.writeFile(
+        path.join(tempDir, "project-metadata.json"),
+        JSON.stringify(
+          {
+            version: 1,
+            projects: {
+              oldBackslashId: {
+                path: "C:\\Users\\kyle\\Documents\\webvam",
+                addedAt: "2026-04-06T09:00:00.000Z",
+              },
+              oldForwardSlashId: {
+                path: "c:/Users/kyle/Documents/webvam",
+                addedAt: "2026-04-06T10:00:00.000Z",
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf-8",
+      );
+
+      const newService = new ProjectMetadataService({ dataDir: tempDir });
+      await newService.initialize();
+
+      const projects = newService.getAllProjects();
+      const canonicalPath = "C:/Users/kyle/Documents/webvam";
+      const canonicalProjectId = encodeProjectId(canonicalPath);
+      expect(Object.keys(projects)).toEqual([canonicalProjectId]);
+      expect(projects[canonicalProjectId]).toEqual({
+        path: canonicalPath,
+        addedAt: "2026-04-06T10:00:00.000Z",
+      });
     });
   });
 
   describe("addProject", () => {
     it("adds a project with path and timestamp", async () => {
-      await service.addProject("proj-1", "/home/user/code/project1");
+      const projectPath = "/home/user/code/project1";
+      const projectId = encodeProjectId(projectPath);
+      await service.addProject(projectId, projectPath);
 
-      const metadata = service.getMetadata("proj-1");
+      const metadata = service.getMetadata(projectId);
       expect(metadata).toBeDefined();
-      expect(metadata?.path).toBe("/home/user/code/project1");
+      expect(metadata?.path).toBe(projectPath);
       expect(metadata?.addedAt).toBeDefined();
     });
 
     it("persists project to disk", async () => {
-      await service.addProject("proj-1", "/home/user/code/project1");
+      const projectPath = "/home/user/code/project1";
+      const projectId = encodeProjectId(projectPath);
+      await service.addProject(projectId, projectPath);
 
       // Read the file directly
       const content = await fs.readFile(
@@ -56,40 +99,61 @@ describe("ProjectMetadataService", () => {
         "utf-8",
       );
       const parsed = JSON.parse(content);
-      expect(parsed.projects["proj-1"]).toBeDefined();
+      expect(parsed.projects[projectId]).toBeDefined();
+    });
+
+    it("stores canonical Windows project IDs and paths", async () => {
+      await service.addProject(
+        "legacy-id",
+        "c:\\Users\\kyle\\Documents\\webvam",
+      );
+
+      const canonicalPath = "C:/Users/kyle/Documents/webvam";
+      const canonicalProjectId = encodeProjectId(canonicalPath);
+      expect(service.getMetadata(canonicalProjectId)).toEqual(
+        expect.objectContaining({
+          path: canonicalPath,
+        }),
+      );
+      expect(service.getMetadata("legacy-id")).toBeUndefined();
     });
   });
 
   describe("removeProject", () => {
     it("removes a project from the list", async () => {
-      await service.addProject("proj-1", "/path1");
-      await service.addProject("proj-2", "/path2");
+      const projectId1 = encodeProjectId("/path1");
+      const projectId2 = encodeProjectId("/path2");
+      await service.addProject(projectId1, "/path1");
+      await service.addProject(projectId2, "/path2");
 
-      await service.removeProject("proj-1");
+      await service.removeProject(projectId1);
 
-      expect(service.getMetadata("proj-1")).toBeUndefined();
-      expect(service.getMetadata("proj-2")).toBeDefined();
+      expect(service.getMetadata(projectId1)).toBeUndefined();
+      expect(service.getMetadata(projectId2)).toBeDefined();
     });
   });
 
   describe("isAddedProject", () => {
     it("returns true for added projects", async () => {
-      await service.addProject("proj-1", "/path1");
+      const projectId = encodeProjectId("/path1");
+      await service.addProject(projectId, "/path1");
 
-      expect(service.isAddedProject("proj-1")).toBe(true);
+      expect(service.isAddedProject(projectId)).toBe(true);
       expect(service.isAddedProject("proj-2")).toBe(false);
     });
   });
 
   describe("getAllProjects", () => {
     it("returns all added projects", async () => {
-      await service.addProject("proj-1", "/path1");
-      await service.addProject("proj-2", "/path2");
+      const projectId1 = encodeProjectId("/path1");
+      const projectId2 = encodeProjectId("/path2");
+      await service.addProject(projectId1, "/path1");
+      await service.addProject(projectId2, "/path2");
 
       const projects = service.getAllProjects();
       expect(Object.keys(projects)).toHaveLength(2);
-      expect(projects["proj-1"].path).toBe("/path1");
-      expect(projects["proj-2"].path).toBe("/path2");
+      expect(projects[projectId1].path).toBe("/path1");
+      expect(projects[projectId2].path).toBe("/path2");
     });
   });
 });

@@ -18,7 +18,7 @@ import type { UrlProjectId } from "@yep-anywhere/shared";
 import { getLogger } from "../logging/logger.js";
 import type { Project } from "../supervisor/types.js";
 import { readFirstLine } from "../utils/jsonl.js";
-import { encodeProjectId } from "./paths.js";
+import { canonicalizeProjectPath, encodeProjectId } from "./paths.js";
 
 export const CODEX_SESSIONS_DIR =
   process.env.CODEX_SESSIONS_DIR ?? getDefaultCodexSessionsDir();
@@ -84,14 +84,15 @@ export class CodexSessionScanner {
     >();
 
     for (const session of sessions) {
-      const existing = projectMap.get(session.cwd);
+      const projectPath = canonicalizeProjectPath(session.cwd);
+      const existing = projectMap.get(projectPath);
       if (existing) {
         existing.sessions.push(session);
         if (session.mtime > existing.lastActivity) {
           existing.lastActivity = session.mtime;
         }
       } else {
-        projectMap.set(session.cwd, {
+        projectMap.set(projectPath, {
           sessions: [session],
           lastActivity: session.mtime,
         });
@@ -133,8 +134,9 @@ export class CodexSessionScanner {
     projectPath: string,
   ): Promise<CodexSessionInfo[]> {
     const sessions = await this.scanAllSessions();
+    const canonicalProjectPath = canonicalizeProjectPath(projectPath);
     return sessions
-      .filter((s) => s.cwd === projectPath)
+      .filter((s) => canonicalizeProjectPath(s.cwd) === canonicalProjectPath)
       .sort((a, b) => b.mtime - a.mtime);
   }
 

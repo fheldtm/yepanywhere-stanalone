@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { UrlProjectId } from "@yep-anywhere/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { encodeProjectId } from "../../src/projects/paths.js";
 import { CodexSessionReader } from "../../src/sessions/codex-reader.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -179,6 +180,52 @@ describe("CodexSessionReader - OSS Support", () => {
       "test-project" as UrlProjectId,
     );
     expect(summary?.provider).toBe("codex");
+  });
+
+  it("filters mixed-slash Windows cwd variants as the same project", async () => {
+    const sessionId = "windows-mixed-slash";
+    await createSessionFile(
+      sessionId,
+      "openai",
+      "gpt-4o",
+      undefined,
+      undefined,
+    );
+
+    await writeFile(
+      join(testDir, `${sessionId}.jsonl`),
+      `${[
+        JSON.stringify({
+          type: "session_meta",
+          timestamp: new Date().toISOString(),
+          payload: {
+            id: sessionId,
+            cwd: "C:\\Users\\kyle\\Documents\\webvam",
+            timestamp: new Date().toISOString(),
+            model_provider: "openai",
+          },
+        }),
+        JSON.stringify({
+          type: "event_msg",
+          timestamp: new Date().toISOString(),
+          payload: {
+            type: "user_message",
+            message: "Hello world",
+          },
+        }),
+      ].join("\n")}\n`,
+    );
+
+    const filteredReader = new CodexSessionReader({
+      sessionsDir: testDir,
+      projectPath: "c:/Users/kyle/Documents/webvam",
+    });
+
+    const summaries = await filteredReader.listSessions(
+      encodeProjectId("C:/Users/kyle/Documents/webvam"),
+    );
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0].id).toBe(sessionId);
   });
 
   it("identifies codex based on model name (gpt-4)", async () => {

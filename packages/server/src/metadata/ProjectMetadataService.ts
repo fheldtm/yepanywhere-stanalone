@@ -7,6 +7,7 @@
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { canonicalizeProjectPath, encodeProjectId } from "../projects/paths.js";
 
 export interface ProjectMetadata {
   /** The absolute path to the project directory */
@@ -66,13 +67,13 @@ export class ProjectMetadataService {
 
       // Validate and migrate if needed
       if (parsed.version === CURRENT_VERSION) {
-        this.state = parsed;
+        this.state = this.normalizeState(parsed);
       } else {
         // Future: handle migrations here
-        this.state = {
+        this.state = this.normalizeState({
           projects: parsed.projects ?? {},
           version: CURRENT_VERSION,
-        };
+        });
         await this.save();
       }
     } catch (error) {
@@ -105,8 +106,13 @@ export class ProjectMetadataService {
    * Add a project. The projectId should be a UrlProjectId (base64url encoded path).
    */
   async addProject(projectId: string, projectPath: string): Promise<void> {
-    this.state.projects[projectId] = {
-      path: projectPath,
+    const canonicalPath = canonicalizeProjectPath(projectPath);
+    const canonicalProjectId = encodeProjectId(canonicalPath);
+    if (projectId !== canonicalProjectId) {
+      delete this.state.projects[projectId];
+    }
+    this.state.projects[canonicalProjectId] = {
+      path: canonicalPath,
       addedAt: new Date().toISOString(),
     };
     await this.save();
@@ -166,5 +172,37 @@ export class ProjectMetadataService {
    */
   getFilePath(): string {
     return this.filePath;
+  }
+
+  private normalizeState(state: ProjectMetadataState): ProjectMetadataState {
+    const projects: Record<string, ProjectMetadata> = {};
+
+    for (const [projectId, metadata] of Object.entries(state.projects ?? {})) {
+      const canonicalPath = canonicalizeProjectPath(metadata.path);
+      const canonicalProjectId = encodeProjectId(canonicalPath);
+      const existing = projects[canonicalProjectId];
+
+      if (
+        !existing ||
+        new Date(metadata.addedAt).getTime() >
+          new Date(existing.addedAt).getTime()
+      ) {
+        projects[canonicalProjectId] = {
+          path: canonicalPath,
+          addedAt: metadata.addedAt,
+        };
+      }
+
+      if (projectId !== canonicalProjectId) {
+        console.log(
+          `[ProjectMetadataService] Canonicalized project metadata key ${projectId} -> ${canonicalProjectId}`,
+        );
+      }
+    }
+
+    return {
+      projects,
+      version: CURRENT_VERSION,
+    };
   }
 }
