@@ -22,7 +22,10 @@ import { exitIfUnsafeHome } from "./safe-home.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
-const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+const isWindows = process.platform === "win32";
+const pnpmBin = isWindows ? "pnpm.cmd" : "pnpm";
+// Node 24+ on Windows requires shell:true to spawn .cmd files (CVE-2024-27980)
+const shellOption = isWindows ? { shell: true } : {};
 
 exitIfUnsafeHome({ entrypoint: "pnpm dev" });
 
@@ -181,6 +184,7 @@ function startServer() {
     cwd: rootDir,
     env,
     stdio: "inherit",
+    ...shellOption,
   });
 
   children.push(server);
@@ -211,6 +215,7 @@ function startClient() {
     cwd: rootDir,
     env,
     stdio: ["ignore", "pipe", "pipe"],
+    ...shellOption,
   });
 
   forwardWithLineFilter(
