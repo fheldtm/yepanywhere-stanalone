@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.27] - 2026-04-16
+
+### Fixed
+- Preserve provider on session restarts
+
 ## [0.4.26] - 2026-04-13
 
 ### Fixed
