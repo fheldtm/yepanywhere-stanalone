@@ -2221,7 +2221,6 @@ a.sidebar-nav-item {
   align-items: center;
   justify-content: center;
   gap: var(--space-1);
-  padding: var(--space-1);
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -2264,7 +2263,6 @@ a.sidebar-nav-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-1);
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -2305,7 +2303,6 @@ a.sidebar-nav-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-1);
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -2450,14 +2447,22 @@ a.sidebar-nav-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--space-1);
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-muted);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
-  min-width: 28px;
+}
+
+.attach-button,
+.thinking-toggle-button,
+.voice-input-button,
+.slash-command-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .slash-command-button:hover {
