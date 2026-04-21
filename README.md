@@ -1,3 +1,10 @@
+> [!NOTE]
+> This repository is an independent customization of
+> [Yep Anywhere](https://github.com/kzahel/yepanywhere). It started from the
+> original MIT-licensed project and is being adapted into a separate application
+> with its own product direction, branding, and feature set. References to
+> Yep Anywhere below may remain while the transition is in progress.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="site/public/branding/lockup-dark.svg">
