@@ -7,6 +7,7 @@ const Wrapper = STRICT_MODE ? StrictMode : Fragment;
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { initializeFontFamilies } from "./hooks/useFontFamily";
 import { initializeFontSize } from "./hooks/useFontSize";
 import { initializeTabSize } from "./hooks/useTabSize";
 import { initializeTheme } from "./hooks/useTheme";
@@ -27,6 +28,7 @@ import "./styles/index.css";
 
 // Apply saved preferences before React renders to avoid flash
 initializeTheme();
+initializeFontFamilies();
 initializeFontSize();
 initializeTabSize();
 

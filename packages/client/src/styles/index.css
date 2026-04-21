@@ -24,9 +24,12 @@
   --thinking-color: var(--app-claude-orange);
 
   /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     sans-serif;
-  --font-mono: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  --font-conversation: var(--font-ui);
+  --font-code: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
   --font-size-xs: 10px;
   --font-size-sm: 12px;
   --font-size-base: 13px;
@@ -407,7 +410,7 @@
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   margin: 0;
   padding: 0;
   /* Safe area insets for Tauri mobile (edge-to-edge mode) and PWA standalone.
@@ -1691,6 +1694,7 @@ a.sidebar-nav-item {
 }
 
 .message-content {
+  font-family: var(--font-conversation);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1747,7 +1751,7 @@ a.sidebar-nav-item {
   border: 1px solid var(--border-input);
   border-radius: 8px;
   color: inherit;
-  font-family: var(--font-sans);
+  font-family: var(--font-conversation);
   font-size: var(--font-size-base);
   resize: none;
 }
@@ -4023,6 +4027,69 @@ a.sidebar-nav-item {
 .font-size-option.active {
   background: var(--app-yep-green);
   color: white;
+}
+
+.font-family-setting {
+  align-items: flex-start;
+}
+
+.font-family-control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 0 1 480px;
+  min-width: min(100%, 360px);
+}
+
+.font-family-input-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.font-family-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-code);
+  font-size: var(--font-size-sm);
+}
+
+.font-family-input:focus {
+  outline: none;
+  border-color: var(--focus-border);
+}
+
+.font-family-preview {
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.font-family-preview-code {
+  font-family: var(--font-code);
+}
+
+@media (max-width: 640px) {
+  .font-family-setting {
+    flex-direction: column;
+  }
+
+  .font-family-control {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .font-family-input-row {
+    flex-direction: column;
+  }
 }
 
 /* ==========================================================================
