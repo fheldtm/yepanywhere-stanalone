@@ -57,6 +57,8 @@ export function getLocaleLabel(
       return t("localeNameDe");
     case "ja":
       return t("localeNameJa");
+    case "ko":
+      return "한국어";
   }
 }
 

@@ -16,6 +16,7 @@ export const SUPPORTED_LOCALES = [
   "fr",
   "de",
   "ja",
+  "ko",
 ] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
@@ -32,6 +33,7 @@ const localeLoaders: Record<Locale, () => Promise<Messages>> = {
   fr: async () => (await import("./i18n/fr.json")).default,
   de: async () => (await import("./i18n/de.json")).default,
   ja: async () => (await import("./i18n/ja.json")).default,
+  ko: async () => (await import("./i18n/ko.json")).default,
 };
 
 interface I18nContextValue {
@@ -58,6 +60,7 @@ function detectLocale(): Locale {
   if (navigator.language.toLowerCase().startsWith("fr")) return "fr";
   if (navigator.language.toLowerCase().startsWith("de")) return "de";
   if (navigator.language.toLowerCase().startsWith("ja")) return "ja";
+  if (navigator.language.toLowerCase().startsWith("ko")) return "ko";
   return DEFAULT_LOCALE;
 }
 
