@@ -10,7 +10,7 @@
   border-radius: 6px;
   padding: 0.75rem;
   overflow-x: auto;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.5;
   margin: 0.5rem 0;
@@ -30,6 +30,7 @@
 
 .text-block,
 .text-content {
+  font-family: var(--font-conversation);
   font-size: var(--font-size-base);
   line-height: 1.5;
   color: var(--text-primary);
@@ -118,16 +119,19 @@
 
 /* Container for completed server-rendered blocks */
 .streaming-blocks {
+  font-family: var(--font-conversation);
   /* Blocks are inserted as child divs with .streaming-block class */
 }
 
 /* Individual block rendered by server */
 .streaming-block {
+  font-family: var(--font-conversation);
   /* Inherits text-block styles - no additional styling needed */
 }
 
 /* Pending text (incomplete block being streamed) */
 .streaming-pending {
+  font-family: var(--font-conversation);
   opacity: 0.7;
 }
 
@@ -487,6 +491,7 @@ details[open] .collapsible__icon {
 }
 
 .thinking-content {
+  font-family: var(--font-conversation);
   white-space: pre-wrap;
   line-height: 1.5;
 }
@@ -529,7 +534,7 @@ details[open] .collapsible__icon {
 }
 
 .tool-icon {
-  font-family: monospace;
+  font-family: var(--font-code);
   color: var(--text-muted);
 }
 
@@ -641,7 +646,7 @@ details[open] .collapsible__icon {
 .bash-preview-command {
   flex: 1;
   min-width: 0;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -662,7 +667,7 @@ details[open] .collapsible__icon {
 
 .bash-preview-output pre {
   margin: 0;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.4;
   white-space: pre-wrap;
@@ -727,7 +732,7 @@ details[open] .collapsible__icon {
   background: var(--bg-code);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.5;
   overflow-x: auto;
@@ -773,7 +778,7 @@ details[open] .collapsible__icon {
   border: 1px solid var(--vscode-widget-border, #454545);
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--vscode-textLink-foreground, #3794ff);
   cursor: pointer;
@@ -803,7 +808,7 @@ details[open] .collapsible__icon {
   background: transparent;
   border: none;
   padding: 0;
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: inherit;
   color: var(--vscode-textLink-foreground, #3794ff);
   cursor: pointer;
@@ -839,7 +844,7 @@ details[open] .collapsible__icon {
 }
 
 .file-path {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--link-color);
   word-break: break-all;
@@ -853,7 +858,7 @@ details[open] .collapsible__icon {
 .file-content-with-lines {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   background: var(--bg-code);
   tab-size: var(--tab-size);
@@ -1008,7 +1013,7 @@ details[open] .collapsible__icon {
    ========================================================================== */
 
 .diff-view {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
 }
 
@@ -1052,7 +1057,7 @@ details[open] .collapsible__icon {
 
 /* Highlighted diff from shiki */
 .highlighted-diff {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.5;
   tab-size: var(--tab-size);
@@ -1603,7 +1608,7 @@ details[open] .collapsible__icon {
 
 .write-preview-content pre {
   margin: 0;
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.4;
   white-space: pre-wrap;
@@ -1637,7 +1642,7 @@ details[open] .collapsible__icon {
 }
 
 .glob-pattern {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-lg);
   color: var(--link-color);
 }
@@ -1710,7 +1715,7 @@ details[open] .collapsible__icon {
 .file-list-item .file-dir {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
 }
 
 .file-list-more {
@@ -1732,7 +1737,7 @@ details[open] .collapsible__icon {
 }
 
 .grep-pattern {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-lg);
   color: var(--link-color);
 }
@@ -1904,6 +1909,7 @@ details[open] .collapsible__icon {
 }
 
 .task-prompt-content {
+  font-family: var(--font-conversation);
   margin-top: 0.5rem;
   padding: 0.5rem;
   background: var(--bg-code);
@@ -1932,6 +1938,7 @@ details[open] .collapsible__icon {
 }
 
 .task-content {
+  font-family: var(--font-conversation);
   border-left: 2px solid var(--border-color);
   padding-left: 1rem;
   margin-left: 0.25rem;
@@ -2147,7 +2154,7 @@ details[open] .collapsible__icon {
 }
 
 .websearch-query {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-lg);
   color: var(--link-color);
 }
@@ -2341,7 +2348,7 @@ details[open] .collapsible__icon {
 
 .question-option-indicator {
   color: var(--text-muted);
-  font-family: monospace;
+  font-family: var(--font-code);
   flex-shrink: 0;
 }
 
@@ -2505,7 +2512,7 @@ details[open] .collapsible__icon {
 }
 
 .bashoutput-id {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-muted);
   background: var(--bg-code);
@@ -2532,7 +2539,7 @@ details[open] .collapsible__icon {
 }
 
 .bashoutput-command {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-secondary, var(--text-muted));
 }
@@ -2587,7 +2594,7 @@ details[open] .collapsible__icon {
 }
 
 .taskoutput-id {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-muted);
   background: var(--bg-code);
@@ -2663,7 +2670,7 @@ details[open] .collapsible__icon {
 }
 
 .killshell-id {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--text-muted);
   background: var(--bg-code);
@@ -2788,7 +2795,7 @@ details[open] .collapsible__icon {
 }
 
 .file-viewer-path {
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   color: var(--link-color);
   word-break: break-all;
@@ -2855,7 +2862,7 @@ details[open] .collapsible__icon {
 
 /* Code display with syntax highlighting */
 .file-viewer-code {
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-code);
   font-size: var(--font-size-base);
   line-height: 1.5;
   background: var(--bg-code);
@@ -3097,7 +3104,7 @@ pre.code-highlighter-plain code {
   background: transparent;
   border: none;
   padding: 0;
-  font-family: "SF Mono", Monaco, monospace;
+  font-family: var(--font-code);
   font-size: inherit;
   color: var(--vscode-textLink-foreground, #3794ff);
   cursor: pointer;
