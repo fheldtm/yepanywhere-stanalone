@@ -1116,6 +1116,7 @@ export class CodexProvider implements AgentProvider {
         cwd: options.cwd,
         approvalPolicy: policy.approvalPolicy,
         sandbox: policy.sandbox,
+        persistExtendedHistory: false,
       };
       const threadStartParams: ThreadStartParams = {
         model: options.model ?? null,
@@ -1123,6 +1124,7 @@ export class CodexProvider implements AgentProvider {
         approvalPolicy: policy.approvalPolicy,
         sandbox: policy.sandbox,
         experimentalRawEvents: false,
+        persistExtendedHistory: false,
       };
       const threadResult: ThreadResumeResponse | ThreadStartResponse =
         options.resumeSessionId
