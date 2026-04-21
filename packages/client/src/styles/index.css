@@ -7965,34 +7965,6 @@ a.sidebar-nav-item {
   }
 }
 
-/* ==========================================================================
-   Session Connection Bar
-   ========================================================================== */
-
-.session-connection-bar {
-  height: 1px;
-  margin-bottom: 2px;
-  pointer-events: none;
-  transition: background-color 0.3s ease;
-}
-
-.session-connection-connected {
-  background-color: var(--success-color);
-}
-
-.session-connection-connecting {
-  background-color: var(--thinking-color);
-  animation: connection-pulse 1.5s ease-in-out infinite;
-}
-
-.session-connection-disconnected {
-  background-color: var(--error-color);
-}
-
-.session-connection-idle {
-  background-color: var(--border-subtle);
-}
-
 /* ---- Git Status Page ---- */
 
 .git-status {
