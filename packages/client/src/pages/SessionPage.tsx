@@ -19,7 +19,6 @@ import {
   useStreamingMarkdownContext,
 } from "../contexts/StreamingMarkdownContext";
 import { useToastContext } from "../contexts/ToastContext";
-import { useActivityBusState } from "../hooks/useActivityBusState";
 import { useConnection } from "../hooks/useConnection";
 import { useDeveloperMode } from "../hooks/useDeveloperMode";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -158,20 +157,12 @@ function SessionPageContent({
   );
 
   // Developer mode settings
-  const { holdModeEnabled, showConnectionBars } = useDeveloperMode();
+  const { holdModeEnabled } = useDeveloperMode();
 
-  // Session connection bar state for active session update streams
-  const { connectionState } = useActivityBusState();
+  // Active sessions use a focused update stream; when it disconnects, keep
+  // pending tool calls from being marked as orphaned until the stream recovers.
   const hasSessionUpdateStream =
     status.owner === "self" || status.owner === "external";
-  const sessionConnectionStatus =
-    !showConnectionBars || !hasSessionUpdateStream
-      ? "idle"
-      : sessionUpdatesConnected
-        ? "connected"
-        : connectionState === "reconnecting"
-          ? "connecting"
-          : "disconnected";
 
   // Effective provider/model for immediate display before session data loads
   const effectiveProvider = session?.provider ?? initialProvider;
@@ -1139,9 +1130,6 @@ function SessionPageContent({
         </main>
 
         <footer className="session-input">
-          <div
-            className={`session-connection-bar session-connection-${sessionConnectionStatus}`}
-          />
           <div className="session-input-inner">
             {/* User question panel */}
             {pendingInputRequest &&
