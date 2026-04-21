@@ -110,8 +110,6 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceButtonRef = useRef<VoiceInputButtonRef>(null);
-  // User-controlled collapse state (independent of external collapse from approval panel)
-  const [userCollapsed, setUserCollapsed] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
 
   // Combined display text: committed text + interim transcript
@@ -130,8 +128,8 @@ export function MessageInput({
     }
   }, [interimTranscript]);
 
-  // Panel is collapsed if user collapsed it OR if externally collapsed (approval panel showing)
-  const collapsed = userCollapsed || externalCollapsed;
+  // Panel is collapsed only when another panel needs the vertical space.
+  const collapsed = !!externalCollapsed;
 
   const canAttach = !!(projectId && sessionId && onAttach);
 
@@ -324,33 +322,6 @@ export function MessageInput({
 
   return (
     <div className="message-input-wrapper">
-      {/* Floating toggle button - only show when user can control collapse (not externally collapsed) */}
-      {!externalCollapsed && (
-        <button
-          type="button"
-          className="message-input-toggle"
-          onClick={() => setUserCollapsed(!userCollapsed)}
-          aria-label={
-            userCollapsed ? t("messageInputExpand") : t("messageInputCollapse")
-          }
-          aria-expanded={!userCollapsed}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={userCollapsed ? "chevron-up" : "chevron-down"}
-            aria-hidden="true"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      )}
       <div
         className={`message-input ${collapsed ? "message-input-collapsed" : ""} ${interimTranscript ? "voice-recording" : ""}`}
       >

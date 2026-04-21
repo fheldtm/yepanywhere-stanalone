@@ -1730,42 +1730,8 @@ a.sidebar-nav-item {
   word-break: break-word;
 }
 
-/* Message input wrapper with collapse toggle */
 .message-input-wrapper {
   position: relative;
-}
-
-.message-input-toggle {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1;
-  width: 32px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-code);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.message-input-toggle:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-}
-
-.message-input-toggle svg {
-  transition: transform 0.2s ease;
-}
-
-.message-input-toggle svg.chevron-up {
-  transform: rotate(180deg);
 }
 
 /* Message input */
