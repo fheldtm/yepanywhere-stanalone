@@ -24,8 +24,7 @@
   --thinking-color: var(--app-claude-orange);
 
   /* Typography */
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-    sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif;
   --font-conversation: var(--font-ui);
   --font-code: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
   --font-sans: var(--font-ui);
@@ -3579,11 +3578,23 @@ a.sidebar-nav-item {
 
 .settings-section {
   margin-bottom: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  line-height: 1.45;
 }
 
 .settings-section h2 {
   margin: 0 0 var(--space-3);
   font-size: var(--font-size-lg);
+  line-height: 1.35;
+}
+
+.settings-group h3 {
+  margin: 0 0 var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .settings-group {
@@ -3605,6 +3616,8 @@ a.sidebar-nav-item {
   padding: var(--space-3);
   background: var(--bg-code);
   border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  line-height: 1.45;
 }
 
 .settings-item-info {
@@ -3615,12 +3628,47 @@ a.sidebar-nav-item {
 .settings-item-info strong {
   display: block;
   margin-bottom: var(--space-1);
+  font-size: var(--font-size-base);
+  line-height: 1.35;
 }
 
 .settings-item-info p {
   margin: 0;
   font-size: var(--font-size-sm);
+  line-height: 1.45;
   color: var(--text-muted);
+}
+
+.settings-description,
+.settings-muted,
+.settings-error {
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.settings-description,
+.settings-muted {
+  color: var(--text-muted);
+}
+
+.settings-error {
+  color: var(--error-color);
+}
+
+.settings-item-label,
+.settings-value-readonly {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  line-height: 1.35;
+}
+
+.settings-item-description {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  margin-top: 2px;
 }
 
 .settings-pending {
@@ -3679,23 +3727,30 @@ a.sidebar-nav-item {
   flex-shrink: 0;
 }
 
-/* Select dropdown for settings */
-.settings-select {
+.settings-input,
+.settings-input-small {
   padding: var(--space-2) var(--space-3);
-  background: var(--bg-hover);
+  background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
-  cursor: pointer;
   min-width: 160px;
 }
 
-.settings-select:hover {
-  background: var(--border-color);
+.settings-input-small {
+  min-width: 96px;
+  width: 112px;
 }
 
-.settings-select:disabled {
+.settings-input:focus,
+.settings-input-small:focus {
+  outline: none;
+  border-color: var(--focus-border);
+}
+
+.settings-input:disabled,
+.settings-input-small:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -3922,6 +3977,8 @@ a.sidebar-nav-item {
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
   text-align: left;
   width: 100%;
 }
@@ -3936,10 +3993,17 @@ a.sidebar-nav-item {
 }
 
 .settings-category-icon {
-  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 2rem;
-  text-align: center;
+  height: 2rem;
+  color: var(--text-muted);
+}
+
+.settings-category-item.active .settings-category-icon {
+  color: var(--app-yep-green);
 }
 
 .settings-category-text {
@@ -3949,13 +4013,16 @@ a.sidebar-nav-item {
 
 .settings-category-label {
   display: block;
+  font-size: var(--font-size-base);
   font-weight: 500;
+  line-height: 1.35;
   color: var(--text-primary);
 }
 
 .settings-category-description {
   display: block;
   font-size: var(--font-size-sm);
+  line-height: 1.35;
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -6302,7 +6369,8 @@ a.sidebar-nav-item {
   gap: var(--space-1);
 }
 
-.form-field label {
+.form-field label,
+.form-field-label {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
   font-weight: 500;
@@ -6497,26 +6565,6 @@ a.sidebar-nav-item {
 .remote-access-actions {
   display: flex;
   gap: var(--space-2);
-}
-
-.form-select {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-input);
-  border-radius: var(--radius-md);
-  background: var(--bg-input);
-  color: var(--text-primary);
-  font-size: var(--font-size-base);
-  cursor: pointer;
-}
-
-.form-select:focus {
-  outline: none;
-  border-color: var(--focus-border);
-}
-
-.form-select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 /* Remote Access QR Code */
@@ -6955,6 +7003,11 @@ a.sidebar-nav-item {
 
 .filter-dropdown-button:hover {
   background: var(--bg-hover);
+}
+
+.filter-dropdown-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .filter-dropdown-button.has-selection {

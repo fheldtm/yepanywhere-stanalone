@@ -13,7 +13,10 @@ export const DEFAULT_FONT_FAMILIES: FontFamilySettings = {
 };
 
 function cleanFontFamily(value: string): string {
-  return value.replace(/[\n\r;]/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/[\n\r;]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function loadFontFamilies(): FontFamilySettings {
@@ -48,7 +51,8 @@ function saveFontFamily(target: FontFamilyTarget, value: string): void {
 
 function applyFontFamilies(settings: FontFamilySettings): void {
   const root = document.documentElement;
-  const system = cleanFontFamily(settings.system) || DEFAULT_FONT_FAMILIES.system;
+  const system =
+    cleanFontFamily(settings.system) || DEFAULT_FONT_FAMILIES.system;
   const conversation =
     cleanFontFamily(settings.conversation) ||
     DEFAULT_FONT_FAMILIES.conversation;

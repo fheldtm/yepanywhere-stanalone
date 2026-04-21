@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { type RelayStatus, useRemoteAccess } from "../hooks/useRemoteAccess";
 import { useI18n } from "../i18n";
 import { parseUserAgent } from "../lib/deviceDetection";
+import { FilterDropdown } from "./FilterDropdown";
 import { QRCode } from "./QRCode";
 
 const DEFAULT_RELAY_URL = "wss://relay.yepanywhere.com/ws";
@@ -445,23 +446,28 @@ export function RemoteAccessSetup({
         )}
 
         <div className="form-field">
-          <label htmlFor="relay-select">
+          <span className="form-field-label">
             {t("remoteSetupRelayServer" as never)}
-          </label>
-          <select
-            id="relay-select"
-            value={relayOption}
-            onChange={(e) => setRelayOption(e.target.value as RelayOption)}
+          </span>
+          <FilterDropdown<RelayOption>
+            label={t("remoteSetupRelayServer" as never)}
+            multiSelect={false}
             disabled={isSaving}
-            className="form-select"
-          >
-            <option value="default">
-              {t("remoteSetupRelayDefault" as never)}
-            </option>
-            <option value="custom">
-              {t("remoteSetupRelayCustom" as never)}
-            </option>
-          </select>
+            options={[
+              {
+                value: "default",
+                label: t("remoteSetupRelayDefault" as never),
+              },
+              { value: "custom", label: t("remoteSetupRelayCustom" as never) },
+            ]}
+            selected={[relayOption]}
+            onChange={(values) => {
+              const nextRelayOption = values[0];
+              if (nextRelayOption) {
+                setRelayOption(nextRelayOption);
+              }
+            }}
+          />
         </div>
 
         {relayOption === "custom" && (

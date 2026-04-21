@@ -53,13 +53,17 @@ function SettingsCategoryItem({
   isActive,
   onClick,
 }: SettingsCategoryItemProps) {
+  const Icon = category.icon;
+
   return (
     <button
       type="button"
       className={`settings-category-item ${isActive ? "active" : ""}`}
       onClick={onClick}
     >
-      <span className="settings-category-icon">{category.icon}</span>
+      <span className="settings-category-icon" aria-hidden="true">
+        <Icon size={18} strokeWidth={2} />
+      </span>
       <div className="settings-category-text">
         <span className="settings-category-label">{category.label}</span>
         <span className="settings-category-description">

@@ -1,3 +1,18 @@
+import {
+  Bell,
+  Bot,
+  Brain,
+  ClipboardList,
+  Globe,
+  Info,
+  LockKeyhole,
+  Monitor,
+  Palette,
+  Plug,
+  Smartphone,
+  Webhook,
+  Wrench,
+} from "lucide-react";
 import type { FontSize } from "./hooks/useFontSize";
 import type { TabSize } from "./hooks/useTabSize";
 import type { Theme } from "./hooks/useTheme";
@@ -69,67 +84,67 @@ export function getSettingsCategories(
     {
       id: "appearance",
       label: t("settingsAppearanceTitle"),
-      icon: "🎨",
+      icon: Palette,
       description: t("settingsAppearanceDescription"),
     },
     {
       id: "model",
       label: t("settingsModelTitle"),
-      icon: "🧠",
+      icon: Brain,
       description: t("settingsModelDescription"),
     },
     {
       id: "agent-context",
       label: t("settingsAgentContextTitle"),
-      icon: "📋",
+      icon: ClipboardList,
       description: t("settingsAgentContextDescription"),
     },
     {
       id: "notifications",
       label: t("settingsNotificationsTitle"),
-      icon: "🔔",
+      icon: Bell,
       description: t("settingsNotificationsDescription"),
     },
     {
       id: "webhooks",
       label: t("settingsWebhooksTitle"),
-      icon: "🪝",
+      icon: Webhook,
       description: t("settingsWebhooksDescription"),
     },
     {
       id: "devices",
       label: t("settingsDevicesTitle"),
-      icon: "📱",
+      icon: Smartphone,
       description: t("settingsDevicesDescription"),
     },
     {
       id: "local-access",
       label: t("settingsLocalAccessTitle"),
-      icon: "🔒",
+      icon: LockKeyhole,
       description: t("settingsLocalAccessDescription"),
     },
     {
       id: "remote",
       label: t("settingsRemoteTitle"),
-      icon: "🌐",
+      icon: Globe,
       description: t("settingsRemoteDescription"),
     },
     {
       id: "providers",
       label: t("settingsProvidersTitle"),
-      icon: "🔌",
+      icon: Plug,
       description: t("settingsProvidersDescription"),
     },
     {
       id: "remote-executors",
       label: t("settingsRemoteExecutorsTitle"),
-      icon: "🖥️",
+      icon: Monitor,
       description: t("settingsRemoteExecutorsDescription"),
     },
     {
       id: "about",
       label: t("settingsAboutTitle"),
-      icon: "ℹ️",
+      icon: Info,
       description: t("settingsAboutDescription"),
     },
   ];
@@ -141,7 +156,7 @@ export function getEmulatorCategory(
   return {
     id: "emulator",
     label: t("settingsEmulatorTitle"),
-    icon: "🤖",
+    icon: Bot,
     description: t("settingsEmulatorDescription"),
   };
 }
@@ -152,7 +167,7 @@ export function getDevelopmentCategory(
   return {
     id: "development",
     label: t("settingsDevelopmentTitle"),
-    icon: "🛠️",
+    icon: Wrench,
     description: t("settingsDevelopmentDescription"),
   };
 }

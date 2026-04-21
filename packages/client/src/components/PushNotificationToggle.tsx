@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNotifyInApp } from "../hooks/useNotifyInApp";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { useI18n } from "../i18n";
+import { FilterDropdown } from "./FilterDropdown";
 
 export type TestNotificationUrgency = "normal" | "persistent" | "silent";
 
@@ -118,20 +119,27 @@ export function PushNotificationToggle() {
               <p>{t("pushToggleTestDescription")}</p>
             </div>
             <div className="settings-item-actions">
-              <select
-                className="settings-select"
-                value={testUrgency}
-                onChange={(e) =>
-                  setTestUrgency(e.target.value as TestNotificationUrgency)
-                }
+              <FilterDropdown<TestNotificationUrgency>
+                label={t("pushToggleTestTitle")}
+                multiSelect={false}
+                align="right"
                 disabled={isLoading}
-              >
-                <option value="normal">{t("pushToggleUrgencyNormal")}</option>
-                <option value="persistent">
-                  {t("pushToggleUrgencyPersistent")}
-                </option>
-                <option value="silent">{t("pushToggleUrgencySilent")}</option>
-              </select>
+                options={[
+                  { value: "normal", label: t("pushToggleUrgencyNormal") },
+                  {
+                    value: "persistent",
+                    label: t("pushToggleUrgencyPersistent"),
+                  },
+                  { value: "silent", label: t("pushToggleUrgencySilent") },
+                ]}
+                selected={[testUrgency]}
+                onChange={(values) => {
+                  const nextUrgency = values[0];
+                  if (nextUrgency) {
+                    setTestUrgency(nextUrgency);
+                  }
+                }}
+              />
               <button
                 type="button"
                 className="settings-button"
