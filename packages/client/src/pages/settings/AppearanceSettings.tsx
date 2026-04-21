@@ -1,3 +1,4 @@
+import { FilterDropdown } from "../../components/FilterDropdown";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import {
   DEFAULT_FONT_FAMILIES,
@@ -96,20 +97,22 @@ export function AppearanceSettings() {
             <strong>{t("appearanceLanguageTitle")}</strong>
             <p>{t("appearanceLanguageDescription")}</p>
           </div>
-          <select
-            className="settings-select"
-            value={locale}
-            onChange={(e) =>
-              setLocale(e.target.value as (typeof SUPPORTED_LOCALES)[number])
-            }
-            aria-label={t("appearanceLanguageTitle")}
-          >
-            {SUPPORTED_LOCALES.map((value) => (
-              <option key={value} value={value}>
-                {getLocaleLabel(value, translate)}
-              </option>
-            ))}
-          </select>
+          <FilterDropdown
+            label={t("appearanceLanguageTitle")}
+            multiSelect={false}
+            align="right"
+            options={SUPPORTED_LOCALES.map((value) => ({
+              value,
+              label: getLocaleLabel(value, translate),
+            }))}
+            selected={[locale]}
+            onChange={(values) => {
+              const nextLocale = values[0];
+              if (nextLocale) {
+                setLocale(nextLocale);
+              }
+            }}
+          />
         </div>
         <div className="settings-item">
           <div className="settings-item-info">

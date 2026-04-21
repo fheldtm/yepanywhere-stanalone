@@ -21,6 +21,7 @@ export interface FilterDropdownProps<T extends string> {
   multiSelect?: boolean; // default true
   placeholder?: string; // shown when nothing selected
   align?: "left" | "right"; // dropdown alignment, default left
+  disabled?: boolean;
 }
 
 /**
@@ -36,6 +37,7 @@ export function FilterDropdown<T extends string>({
   multiSelect = true,
   placeholder,
   align = "left",
+  disabled,
 }: FilterDropdownProps<T>) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -46,6 +48,7 @@ export function FilterDropdown<T extends string>({
   const sheetRef = useRef<HTMLDivElement>(null);
 
   const handleButtonClick = () => {
+    if (disabled) return;
     buttonRef.current?.blur();
     setIsOpen((prev) => !prev);
   };
@@ -266,6 +269,7 @@ export function FilterDropdown<T extends string>({
         type="button"
         className={`filter-dropdown-button ${selected.length > 0 ? "has-selection" : ""}`}
         onClick={handleButtonClick}
+        disabled={disabled}
         title={t("filterByLabel", { label })}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
