@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isUrlProjectId, toUrlProjectId } from "@yep-anywhere/shared";
 import { Hono } from "hono";
@@ -274,7 +275,7 @@ export function createProjectsRoutes(deps: ProjectsDeps): Hono {
   // POST /api/projects - Add a project by path
   // Validates the path exists on disk and returns project info
   routes.post("/", async (c) => {
-    let body: { path: string };
+    let body: { path: string; create?: boolean };
     try {
       body = await c.req.json();
     } catch {
@@ -299,6 +300,16 @@ export function createProjectsRoutes(deps: ProjectsDeps): Hono {
     // Validate path is absolute
     if (!isAbsolutePath(normalizedPath)) {
       return c.json({ error: "Path must be absolute" }, 400);
+    }
+
+    if (body.create) {
+      try {
+        await mkdir(normalizedPath, { recursive: true });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to create directory";
+        return c.json({ error: message }, 400);
+      }
     }
 
     // Create projectId and try to get/create the project

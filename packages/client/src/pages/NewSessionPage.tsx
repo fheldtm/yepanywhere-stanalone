@@ -1,12 +1,14 @@
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { NewSessionForm } from "../components/NewSessionForm";
 import { PageHeader } from "../components/PageHeader";
-import { ProjectSelector } from "../components/ProjectSelector";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useProject, useProjects } from "../hooks/useProjects";
 import { resolvePreferredProjectId } from "../hooks/useRecentProject";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
+import type { Project } from "../types";
 
 export function NewSessionPage() {
   const { t } = useI18n();
@@ -16,7 +18,11 @@ export function NewSessionPage() {
     useNavigationLayout();
 
   // Get all projects to find default if no projectId specified
-  const { projects, loading: projectsLoading } = useProjects();
+  const {
+    projects,
+    loading: projectsLoading,
+    refetch: refetchProjects,
+  } = useProjects();
 
   // Use the provided projectId, or the preferred recent project when available
   const effectiveProjectId = projectId || resolvePreferredProjectId(projects);
@@ -26,16 +32,29 @@ export function NewSessionPage() {
     loading: projectLoading,
     error,
   } = useProject(effectiveProjectId ?? undefined);
+  const [optimisticProject, setOptimisticProject] = useState<Project | null>(
+    null,
+  );
+  const displayedProject =
+    project ??
+    (optimisticProject?.id === effectiveProjectId ? optimisticProject : null);
+
+  useEffect(() => {
+    if (project) {
+      setOptimisticProject(project);
+    }
+  }, [project]);
 
   // Update browser tab title (must be called unconditionally before any early returns)
-  useDocumentTitle(project?.name, t("newSessionTitle"));
+  useDocumentTitle(displayedProject?.name, t("newSessionTitle"));
 
   // Callback to update projectId in URL without navigation
-  const handleProjectChange = (newProjectId: string) => {
-    setSearchParams({ projectId: newProjectId }, { replace: true });
+  const handleProjectChange = (newProject: Project) => {
+    setOptimisticProject(newProject);
+    setSearchParams({ projectId: newProject.id }, { replace: true });
   };
 
-  const loading = projectLoading || projectsLoading;
+  const loading = projectsLoading || (projectLoading && !displayedProject);
 
   // Guard against missing projectId (no projects available)
   if (!effectiveProjectId && !projectsLoading && projects.length === 0) {
@@ -43,7 +62,16 @@ export function NewSessionPage() {
   }
 
   // Render loading/error states
-  if (loading || error) {
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("newSessionLoading")}
+      />
+    );
+  }
+
+  if (error && !displayedProject) {
     return (
       <div
         className={
@@ -66,13 +94,9 @@ export function NewSessionPage() {
           />
           <main className="page-scroll-container">
             <div className="page-content-inner">
-              {loading ? (
-                <div className="loading">{t("newSessionLoading")}</div>
-              ) : (
-                <div className="error">
-                  {t("newSessionErrorPrefix")} {error?.message}
-                </div>
-              )}
+              <div className="error">
+                {t("newSessionErrorPrefix")} {error?.message}
+              </div>
             </div>
           </main>
         </div>
@@ -92,16 +116,7 @@ export function NewSessionPage() {
         }
       >
         <PageHeader
-          title={project?.name ?? t("newSessionTitle")}
-          titleElement={
-            effectiveProjectId ? (
-              <ProjectSelector
-                currentProjectId={effectiveProjectId}
-                currentProjectName={project?.name}
-                onProjectChange={(p) => handleProjectChange(p.id)}
-              />
-            ) : undefined
-          }
+          title={t("newSessionTitle")}
           onOpenSidebar={openSidebar}
           onToggleSidebar={toggleSidebar}
           isWideScreen={isWideScreen}
@@ -111,7 +126,12 @@ export function NewSessionPage() {
         <main className="page-scroll-container">
           <div className="page-content-inner">
             {effectiveProjectId && (
-              <NewSessionForm projectId={effectiveProjectId} />
+              <NewSessionForm
+                projectId={effectiveProjectId}
+                project={displayedProject}
+                onProjectChange={handleProjectChange}
+                onProjectAdded={refetchProjects}
+              />
             )}
           </div>
         </main>
