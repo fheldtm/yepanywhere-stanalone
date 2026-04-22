@@ -80,9 +80,25 @@ const realVisibility: VisibilityInterface = {
   isVisible: () => typeof document !== "undefined" && !document.hidden,
   onVisibilityChange(cb) {
     if (typeof document === "undefined") return () => {};
-    const handler = () => cb(!document.hidden);
-    document.addEventListener("visibilitychange", handler);
-    return () => document.removeEventListener("visibilitychange", handler);
+    const handleVisibilityChange = () => cb(!document.hidden);
+    const handleVisible = () => {
+      if (!document.hidden) cb(true);
+    };
+    const handleHidden = () => cb(false);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pageshow", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    window.addEventListener("online", handleVisible);
+    window.addEventListener("pagehide", handleHidden);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pageshow", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+      window.removeEventListener("online", handleVisible);
+      window.removeEventListener("pagehide", handleHidden);
+    };
   },
 };
 

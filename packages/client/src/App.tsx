@@ -10,7 +10,9 @@ import { useActivityBusConnection } from "./hooks/useActivityBusConnection";
 import { useNeedsAttentionBadge } from "./hooks/useNeedsAttentionBadge";
 import { useSyncNotifyInAppSetting } from "./hooks/useNotifyInApp";
 import { useOnboarding } from "./hooks/useOnboarding";
+import { usePwaInstall } from "./hooks/usePwaInstall";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
+import { useServiceWorkerRegistration } from "./hooks/useServiceWorkerRegistration";
 import { I18nProvider } from "./i18n";
 import { initClientLogCollection } from "./lib/diagnostics";
 
@@ -24,6 +26,10 @@ interface Props {
 function AppContent({ children }: Props) {
   // Manage SSE connection based on auth state (prevents 401s on login page)
   useActivityBusConnection();
+
+  // PWA installability: register SW and capture install prompt early.
+  useServiceWorkerRegistration();
+  usePwaInstall();
 
   // Client-side log collection for connection diagnostics
   useEffect(() => initClientLogCollection(), []);

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { registerServiceWorker } from "../lib/serviceWorker";
 import {
   LEGACY_KEYS,
   getOrCreateBrowserProfileId,
   getServerScoped,
 } from "../lib/storageKeys";
-// Use Vite's base URL - in production remote build this is /remote/
-const SW_PATH = `${import.meta.env.BASE_URL}sw.js`;
 
 // In production, SW is always enabled
 // In dev mode, check server setting (allows runtime toggle via settings UI)
@@ -99,7 +98,7 @@ export function usePushNotifications() {
 
       // Register service worker
       try {
-        const reg = await navigator.serviceWorker.register(SW_PATH);
+        const reg = await registerServiceWorker();
         setRegistration(reg);
 
         // Wait for service worker to be ready

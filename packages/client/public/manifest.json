@@ -1,11 +1,15 @@
 {
   "name": "Yep Anywhere",
-  "short_name": "Yep Anywhere",
+  "short_name": "Yep",
   "description": "Access your AI agents from anywhere",
+  "id": ".",
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
-  "background_color": "#1f1f1f",
-  "theme_color": "#1f1f1f",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#fbf8ff",
+  "theme_color": "#7c3aed",
+  "categories": ["productivity", "developer", "utilities"],
   "icons": [
     {
       "src": "icon-192.png",

@@ -53,6 +53,19 @@ export function useSessionStream(
     connectWithConnection(sessionId, getWebSocketConnection());
   }, [sessionId]);
 
+  const reconnect = useCallback(() => {
+    if (!sessionId) return;
+    if (wsSubscriptionRef.current) {
+      const old = wsSubscriptionRef.current;
+      wsSubscriptionRef.current = null;
+      old.close();
+    }
+    mountedSessionIdRef.current = null;
+    setConnected(false);
+    // Defer so the close completes before reconnecting
+    setTimeout(() => connect(), 50);
+  }, [sessionId, connect]);
+
   /**
    * Connect using a provided connection (remote or local WebSocket).
    */
@@ -176,19 +189,14 @@ export function useSessionStream(
     });
   }, [sessionId, connect]);
 
-  // Force reconnect (e.g., after process restart)
-  const reconnect = useCallback(() => {
-    if (!sessionId) return;
-    if (wsSubscriptionRef.current) {
-      const old = wsSubscriptionRef.current;
-      wsSubscriptionRef.current = null;
-      old.close();
-    }
-    mountedSessionIdRef.current = null;
-    setConnected(false);
-    // Defer so the close completes before reconnecting
-    setTimeout(() => connect(), 50);
-  }, [sessionId, connect]);
+  // Mobile PWAs can resume with a stale subscription object after the browser
+  // freezes background work. Re-subscribe on foreground restore and replay from
+  // lastEventId so the focused session catches up.
+  useEffect(() => {
+    return connectionManager.on("visibilityRestored", () => {
+      reconnect();
+    });
+  }, [reconnect]);
 
   useEffect(() => {
     connect();
