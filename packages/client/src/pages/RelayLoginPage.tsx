@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { YepAnywhereLogo } from "../components/YepAnywhereLogo";
 import { useRemoteConnection } from "../contexts/RemoteConnectionContext";
 import { useI18n } from "../i18n";
@@ -133,17 +134,10 @@ export function RelayLoginPage() {
   // If auto-resume is in progress, show a loading screen
   if (isAutoResuming) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-logo">
-            <YepAnywhereLogo />
-          </div>
-          <p className="login-subtitle">{t("reconnecting")}</p>
-          <div className="login-loading" data-testid="auto-resume-loading">
-            <div className="login-spinner" />
-          </div>
-        </div>
-      </div>
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("reconnecting")}
+      />
     );
   }
 
@@ -303,7 +297,10 @@ export function RelayLoginPage() {
 
           {isConnecting && statusMessage && (
             <div className="login-status" data-testid="connection-status">
-              <div className="login-spinner" />
+              <LoadingIndicator
+                className="loading-indicator--compact"
+                label={statusMessage}
+              />
               <span>{statusMessage}</span>
             </div>
           )}

@@ -4,6 +4,7 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -17,6 +18,8 @@ import { hasCoarsePointer } from "../lib/deviceDetection";
 import type { ContextUsage, PermissionMode } from "../types";
 import { MessageInputToolbar } from "./MessageInputToolbar";
 import type { VoiceInputButtonRef } from "./VoiceInputButton";
+
+const MAX_TEXTAREA_ROWS = 20;
 
 /** Progress info for an in-flight upload */
 export interface UploadProgress {
@@ -72,6 +75,8 @@ interface Props {
   supportsPermissionMode?: boolean;
   /** Whether the provider supports thinking toggle (default: true) */
   supportsThinkingToggle?: boolean;
+  /** Current agent provider, used for provider-specific permission labels */
+  provider?: string;
   /** Available slash commands (without "/" prefix) */
   slashCommands?: string[];
   /** Callback for custom client-side commands (e.g., "model"). Return true if handled. */
@@ -102,6 +107,7 @@ export function MessageInput({
   uploadProgress = [],
   supportsPermissionMode = true,
   supportsThinkingToggle = true,
+  provider,
   slashCommands = [],
   onCustomCommand,
 }: Props) {
@@ -132,6 +138,36 @@ export function MessageInput({
   const collapsed = !!externalCollapsed;
 
   const canAttach = !!(projectId && sessionId && onAttach);
+
+  const resizeTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const computed = window.getComputedStyle(textarea);
+    const lineHeight = Number.parseFloat(computed.lineHeight);
+    const paddingTop = Number.parseFloat(computed.paddingTop);
+    const paddingBottom = Number.parseFloat(computed.paddingBottom);
+    const borderTop = Number.parseFloat(computed.borderTopWidth);
+    const borderBottom = Number.parseFloat(computed.borderBottomWidth);
+    const verticalChrome =
+      paddingTop + paddingBottom + borderTop + borderBottom;
+    const minRows = collapsed ? 1 : 3;
+    const minHeight = lineHeight * minRows + verticalChrome;
+    const maxHeight = lineHeight * MAX_TEXTAREA_ROWS + verticalChrome;
+
+    textarea.style.height = "auto";
+    const contentHeight = textarea.scrollHeight + borderTop + borderBottom;
+    const nextHeight = Math.min(Math.max(contentHeight, minHeight), maxHeight);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";
+  }, [collapsed]);
+
+  useLayoutEffect(() => {
+    // Depend on the rendered textarea value so the height shrinks and grows
+    // with typed text, draft restoration, and interim voice transcripts.
+    void displayText;
+    resizeTextarea();
+  }, [displayText, resizeTextarea]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -334,6 +370,7 @@ export function MessageInput({
             setInterimTranscript("");
             setText(e.target.value);
           }}
+          onInput={resizeTextarea}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={
@@ -398,6 +435,7 @@ export function MessageInput({
             onHoldChange={onHoldChange}
             supportsPermissionMode={supportsPermissionMode}
             supportsThinkingToggle={supportsThinkingToggle}
+            provider={provider}
             canAttach={canAttach}
             attachmentCount={attachments.length}
             onAttachClick={() => fileInputRef.current?.click()}

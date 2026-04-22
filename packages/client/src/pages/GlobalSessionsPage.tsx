@@ -7,6 +7,7 @@ import {
   FilterDropdown,
   type FilterOption,
 } from "../components/FilterDropdown";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { PageHeader } from "../components/PageHeader";
 import { SessionListItem } from "../components/SessionListItem";
 import { useDrafts } from "../hooks/useDrafts";
@@ -581,6 +582,15 @@ export function GlobalSessionsPage() {
     executorFilters.length > 0 ||
     ageFilter;
 
+  if (loading && sessions.length === 0) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("sidebarLoadingSessions")}
+      />
+    );
+  }
+
   return (
     <div
       className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
@@ -684,10 +694,6 @@ export function GlobalSessionsPage() {
                 </button>
               )}
             </div>
-
-            {loading && sessions.length === 0 && (
-              <p className="loading">{t("sidebarLoadingSessions")}</p>
-            )}
 
             {error && (
               <p className="error">

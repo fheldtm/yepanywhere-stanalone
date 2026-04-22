@@ -1,11 +1,18 @@
 import type { UploadedFile } from "@yep-anywhere/shared";
+import {
+  Clock,
+  ListPlus,
+  Paperclip,
+  SendHorizontal,
+  Square,
+} from "lucide-react";
 import type { RefObject } from "react";
 import { useModelSettings } from "../hooks/useModelSettings";
 import { useI18n } from "../i18n";
 import type { ContextUsage, PermissionMode } from "../types";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { ModeSelector } from "./ModeSelector";
-import { SlashCommandButton } from "./SlashCommandButton";
+import { PromptToolsButton } from "./PromptToolsButton";
 import { VoiceInputButton, type VoiceInputButtonRef } from "./VoiceInputButton";
 
 export interface MessageInputToolbarProps {
@@ -18,6 +25,7 @@ export interface MessageInputToolbarProps {
   // Provider capability flags (default to true for backwards compatibility)
   supportsPermissionMode?: boolean;
   supportsThinkingToggle?: boolean;
+  provider?: string;
 
   // Attachments
   canAttach?: boolean;
@@ -62,6 +70,7 @@ export function MessageInputToolbar({
   onHoldChange,
   supportsPermissionMode = true,
   supportsThinkingToggle = true,
+  provider,
   canAttach,
   attachmentCount = 0,
   onAttachClick,
@@ -94,6 +103,7 @@ export function MessageInputToolbar({
             onModeChange={onModeChange}
             isHeld={isHeld}
             onHoldChange={onHoldChange}
+            provider={provider}
           />
         )}
         <button
@@ -105,17 +115,7 @@ export function MessageInputToolbar({
             canAttach ? t("toolbarAttachFiles") : t("toolbarAttachDisabled")
           }
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-          </svg>
+          <Paperclip size={16} aria-hidden="true" />
           {attachmentCount > 0 && (
             <span className="attach-count">{attachmentCount}</span>
           )}
@@ -134,44 +134,12 @@ export function MessageInputToolbar({
             }
             aria-label={t("newSessionThinkingMode", { mode: thinkingMode })}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
+            <span className="thinking-toggle-icon">
+              <Clock size={16} aria-hidden="true" />
               {thinkingMode === "auto" && (
-                <g>
-                  <circle
-                    cx="19"
-                    cy="5"
-                    r="5.5"
-                    fill="currentColor"
-                    stroke="none"
-                  />
-                  <text
-                    x="19"
-                    y="5"
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill="var(--bg-primary, #1a1a2e)"
-                    fontSize="8"
-                    fontWeight="700"
-                    fontFamily="system-ui, sans-serif"
-                    stroke="none"
-                  >
-                    A
-                  </text>
-                </g>
+                <span className="thinking-toggle-auto-badge">A</span>
               )}
-            </svg>
+            </span>
           </button>
         )}
         {voiceButtonRef && onVoiceTranscript && onInterimTranscript && (
@@ -184,7 +152,7 @@ export function MessageInputToolbar({
           />
         )}
         {onSelectSlashCommand && (
-          <SlashCommandButton
+          <PromptToolsButton
             commands={slashCommands}
             onSelectCommand={onSelectSlashCommand}
             disabled={voiceDisabled}
@@ -222,24 +190,7 @@ export function MessageInputToolbar({
             title={t("toolbarQueueTitle")}
             aria-label={t("toolbarQueueLabel")}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <line x1="8" y1="6" x2="21" y2="6" />
-              <line x1="8" y1="12" x2="21" y2="12" />
-              <line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" />
-              <line x1="3" y1="12" x2="3.01" y2="12" />
-              <line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
+            <ListPlus size={16} aria-hidden="true" />
           </button>
         )}
         {/* Show stop button when thinking and nothing to send, otherwise show send */}
@@ -250,7 +201,7 @@ export function MessageInputToolbar({
             className="stop-button"
             aria-label={t("toolbarStop")}
           >
-            <span className="stop-icon" />
+            <Square size={14} fill="currentColor" aria-hidden="true" />
           </button>
         ) : onSend ? (
           <button
@@ -260,7 +211,7 @@ export function MessageInputToolbar({
             className="send-button"
             aria-label={t("toolbarSend")}
           >
-            <span className="send-icon">↑</span>
+            <SendHorizontal size={16} aria-hidden="true" />
           </button>
         ) : null}
       </div>

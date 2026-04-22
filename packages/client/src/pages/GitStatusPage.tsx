@@ -2,6 +2,7 @@ import type { GitFileChange } from "@yep-anywhere/shared";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { PageHeader } from "../components/PageHeader";
 import { ProjectSelector } from "../components/ProjectSelector";
 import { Modal } from "../components/ui/Modal";
@@ -47,6 +48,15 @@ export function GitStatusPage() {
     return <div className="error">{t("gitStatusNoProjects")}</div>;
   }
 
+  if (loading || projectsLoading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("gitStatusLoading")}
+      />
+    );
+  }
+
   const wrapperClass = isWideScreen
     ? "main-content-wrapper"
     : "main-content-mobile";
@@ -76,9 +86,7 @@ export function GitStatusPage() {
 
         <main className="page-scroll-container">
           <div className="page-content-inner">
-            {loading || projectsLoading ? (
-              <div className="loading">{t("gitStatusLoading")}</div>
-            ) : error ? (
+            {error ? (
               <div className="error">
                 {t("gitStatusErrorPrefix")} {error.message}
               </div>

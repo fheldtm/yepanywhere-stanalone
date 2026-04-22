@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { PageHeader } from "../components/PageHeader";
 import { ProjectCard } from "../components/ProjectCard";
 import { useInboxContext } from "../contexts/InboxContext";
@@ -81,7 +82,14 @@ export function ProjectsPage() {
     }
   };
 
-  if (loading) return <div className="loading">{t("projectsLoading")}</div>;
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("projectsLoading")}
+      />
+    );
+  }
   if (error) {
     return (
       <div className="error">
