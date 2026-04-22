@@ -44,6 +44,7 @@ export function getCurrentInstallId(): string | undefined {
 export const UI_KEYS = {
   locale: "yep-anywhere-locale",
   theme: "yep-anywhere-theme",
+  customPalette: "yep-anywhere-custom-palette",
   fontSize: "yep-anywhere-font-size",
   systemFontFamily: "yep-anywhere-system-font-family",
   conversationFontFamily: "yep-anywhere-conversation-font-family",

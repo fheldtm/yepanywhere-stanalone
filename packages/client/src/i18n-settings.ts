@@ -30,8 +30,6 @@ export function getThemeLabel(
       return t("themeLight");
     case "dark":
       return t("themeDark");
-    case "verydark":
-      return t("themeVerydark");
   }
 }
 
