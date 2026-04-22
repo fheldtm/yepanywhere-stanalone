@@ -17,6 +17,28 @@ const MODE_LABELS: Record<PermissionMode, string> = {
   bypassPermissions: "Bypass permissions",
 };
 
+const CODEX_MODE_LABELS: Record<PermissionMode, string> = {
+  default: "On request + workspace",
+  acceptEdits: "Full auto + workspace",
+  plan: "On request + read-only",
+  bypassPermissions: "No approvals + no sandbox",
+};
+
+const MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
+  default: "Read-only tools run automatically; edits ask first.",
+  acceptEdits: "File edits run automatically; riskier tools ask first.",
+  plan: "Planning mode; tools that change files ask first.",
+  bypassPermissions: "Bypass tool permission prompts.",
+};
+
+const CODEX_MODE_DESCRIPTIONS: Record<PermissionMode, string> = {
+  default: "Codex: -a on-request, --sandbox workspace-write.",
+  acceptEdits:
+    "Codex full-auto alias: -a on-request, --sandbox workspace-write.",
+  plan: "Codex: -a on-request, --sandbox read-only.",
+  bypassPermissions: "Codex: --dangerously-bypass-approvals-and-sandbox.",
+};
+
 // Breakpoint for desktop behavior (should match CSS)
 const DESKTOP_BREAKPOINT = 769;
 
@@ -28,6 +50,8 @@ interface ModeSelectorProps {
   isHeld?: boolean;
   /** Callback when hold state changes */
   onHoldChange?: (held: boolean) => void;
+  /** Current agent provider, used for provider-specific permission labels */
+  provider?: string;
 }
 
 /**
@@ -41,6 +65,7 @@ export function ModeSelector({
   disabled,
   isHeld = false,
   onHoldChange,
+  provider,
 }: ModeSelectorProps) {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -147,7 +172,12 @@ export function ModeSelector({
   };
 
   // Display text: show "Hold" when held, otherwise show mode label
-  const displayLabel = isHeld ? t("modeHold" as never) : MODE_LABELS[mode];
+  const isCodexProvider = provider === "codex" || provider === "codex-oss";
+  const modeLabels = isCodexProvider ? CODEX_MODE_LABELS : MODE_LABELS;
+  const modeDescriptions = isCodexProvider
+    ? CODEX_MODE_DESCRIPTIONS
+    : MODE_DESCRIPTIONS;
+  const displayLabel = isHeld ? t("modeHold" as never) : modeLabels[mode];
   const displayDotClass = isHeld ? "mode-hold" : `mode-${mode}`;
 
   // Shared options content used by both mobile sheet and desktop dropdown
@@ -203,7 +233,10 @@ export function ModeSelector({
           aria-pressed={!isHeld && mode === m}
         >
           <span className={`mode-dot mode-${m}`} />
-          <span className="mode-selector-label">{MODE_LABELS[m]}</span>
+          <span className="mode-selector-label">{modeLabels[m]}</span>
+          <span className="mode-selector-description">
+            {modeDescriptions[m]}
+          </span>
           {!isHeld && mode === m && (
             <span className="mode-selector-check" aria-hidden="true">
               <svg
@@ -275,12 +308,13 @@ export function ModeSelector({
         className={`mode-button ${isHeld ? "mode-button-held" : ""}`}
         onClick={handleButtonClick}
         disabled={disabled}
-        title={t("modeClickToSelect" as never)}
+        title={displayLabel}
+        aria-label={displayLabel}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
         <span className={`mode-dot ${displayDotClass}`} />
-        {displayLabel}
+        <span className="mode-button-label">{displayLabel}</span>
       </button>
       {desktopDropdown}
       {mobileSheet}

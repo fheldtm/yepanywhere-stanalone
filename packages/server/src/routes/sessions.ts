@@ -21,6 +21,7 @@ import { getProjectDirFromCwd, syncSessions } from "../sdk/session-sync.js";
 import type { PermissionMode, SDKMessage, UserMessage } from "../sdk/types.js";
 import type { ModelInfoService } from "../services/ModelInfoService.js";
 import type { ServerSettingsService } from "../services/ServerSettingsService.js";
+import type { SessionDetailCache } from "../session-cache/index.js";
 import { CodexSessionReader } from "../sessions/codex-reader.js";
 import { cloneClaudeSession, cloneCodexSession } from "../sessions/fork.js";
 import { GeminiSessionReader } from "../sessions/gemini-reader.js";
@@ -39,7 +40,12 @@ import type {
   Supervisor,
 } from "../supervisor/Supervisor.js";
 import type { QueuedResponse } from "../supervisor/WorkerQueue.js";
-import type { ContentBlock, Message, Project } from "../supervisor/types.js";
+import type {
+  ContentBlock,
+  Message,
+  Project,
+  Session,
+} from "../supervisor/types.js";
 import {
   isValidSshHostAlias,
   normalizeSshHostAlias,
@@ -95,6 +101,12 @@ function isCodexProviderName(
   return provider === "codex" || provider === "codex-oss";
 }
 
+function getMessageId(message: Message): string | undefined {
+  return (
+    message.uuid ?? (typeof message.id === "string" ? message.id : undefined)
+  );
+}
+
 export interface SessionsDeps {
   supervisor: Supervisor;
   scanner: ProjectScanner;
@@ -115,6 +127,8 @@ export interface SessionsDeps {
   serverSettingsService?: ServerSettingsService;
   /** ModelInfoService for context window lookups */
   modelInfoService?: ModelInfoService;
+  /** File-backed cache for normalized persisted session details */
+  sessionDetailCache?: SessionDetailCache;
 }
 
 interface StartSessionBody {
@@ -557,25 +571,93 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     // Only mark tools as "aborted" if we owned the session and know it terminated
     const wasEverOwned = deps.supervisor.wasEverOwned(sessionId);
 
+    // Only include orphaned tool info if:
+    // 1. We previously owned this session (not external)
+    // 2. No active process (tools aren't potentially in progress)
+    // When we own the session, tools without results might be pending approval
+    const includeOrphans = wasEverOwned && !process;
+    const shouldSliceAtCompactBoundaries =
+      tailCompactions !== undefined &&
+      !Number.isNaN(tailCompactions) &&
+      tailCompactions > 0 &&
+      !afterMessageId;
+    const cacheViewKey = shouldSliceAtCompactBoundaries
+      ? { tailCompactions, beforeMessageId: beforeMessageId ?? null }
+      : { tailCompactions: null, beforeMessageId: null };
+
+    const loadNormalizedSession = async (
+      reader: ISessionReader,
+      provider: ProviderName,
+    ): Promise<{ session: Session; pagination?: PaginationInfo } | null> => {
+      const compute = async (): Promise<{
+        session: Session;
+        pagination?: PaginationInfo;
+      } | null> => {
+        const loaded = await reader.getSession(
+          sessionId,
+          project.id,
+          afterMessageId,
+          { includeOrphans },
+        );
+        if (!loaded) return null;
+
+        let session = normalizeSession(loaded);
+        let paginationInfo: PaginationInfo | undefined;
+
+        if (afterMessageId) {
+          const afterIndex = session.messages.findIndex(
+            (message) => getMessageId(message) === afterMessageId,
+          );
+          if (afterIndex !== -1) {
+            session = {
+              ...session,
+              messages: session.messages.slice(afterIndex + 1),
+            };
+          }
+        }
+
+        if (shouldSliceAtCompactBoundaries) {
+          const sliced = sliceAtCompactBoundaries(
+            session.messages,
+            tailCompactions,
+            beforeMessageId,
+          );
+          session = { ...session, messages: sliced.messages };
+          paginationInfo = sliced.pagination;
+        }
+
+        // Keep persisted rendering in lockstep with stream augmentation behavior.
+        await augmentPersistedSessionMessages(session.messages);
+
+        return { session, pagination: paginationInfo };
+      };
+
+      // Active sessions and incremental fetches are intentionally uncached.
+      // Their persisted file can be moving quickly, and afterMessageId changes
+      // the reader result shape.
+      if (process || afterMessageId || !deps.sessionDetailCache) {
+        return compute();
+      }
+
+      return deps.sessionDetailCache.getOrCompute({
+        provider,
+        projectId: project.id,
+        sessionId,
+        reader,
+        includeOrphans,
+        viewKey: cacheViewKey,
+        compute,
+      });
+    };
+
     // Always try to read from disk first (even for owned sessions)
     const reader = deps.readerFactory(project);
-    let loadedSession = await reader.getSession(
-      sessionId,
-      project.id,
-      afterMessageId,
-      {
-        // Only include orphaned tool info if:
-        // 1. We previously owned this session (not external)
-        // 2. No active process (tools aren't potentially in progress)
-        // When we own the session, tools without results might be pending approval
-        includeOrphans: wasEverOwned && !process,
-      },
-    );
+    let loadedPayload = await loadNormalizedSession(reader, project.provider);
 
     // For Claude projects, also check for Codex sessions if primary reader didn't find it
     // This handles mixed projects that have sessions from multiple providers
     if (
-      !loadedSession &&
+      !loadedPayload &&
       project.provider === "claude" &&
       (deps.codexReaderFactory || deps.codexSessionsDir)
     ) {
@@ -588,19 +670,14 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
             })
           : null);
       if (codexReader) {
-        loadedSession = await codexReader.getSession(
-          sessionId,
-          project.id,
-          afterMessageId,
-          { includeOrphans: wasEverOwned && !process },
-        );
+        loadedPayload = await loadNormalizedSession(codexReader, "codex");
       }
     }
 
     // For Claude/Codex projects, also check for Gemini sessions if still not found
     // This handles mixed projects that have sessions from multiple providers
     if (
-      !loadedSession &&
+      !loadedPayload &&
       (project.provider === "claude" || project.provider === "codex") &&
       (deps.geminiReaderFactory || deps.geminiSessionsDir)
     ) {
@@ -614,16 +691,12 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
             })
           : null);
       if (geminiReader) {
-        loadedSession = await geminiReader.getSession(
-          sessionId,
-          project.id,
-          afterMessageId,
-          { includeOrphans: wasEverOwned && !process },
-        );
+        loadedPayload = await loadNormalizedSession(geminiReader, "gemini");
       }
     }
 
-    let session = loadedSession ? normalizeSession(loadedSession) : null;
+    const session = loadedPayload?.session ?? null;
+    const paginationInfo = loadedPayload?.pagination;
 
     // Determine the session ownership
     const ownership = process
@@ -723,28 +796,6 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const hasUnread = deps.notificationService
       ? deps.notificationService.hasUnread(sessionId, session.updatedAt)
       : undefined;
-
-    // Apply compact-boundary pagination if requested (BEFORE expensive augmentation)
-    // tailCompactions slices to last N compact boundaries; skip when afterMessageId is
-    // present since that's a different use case (incremental forward-fetch)
-    let paginationInfo: PaginationInfo | undefined;
-    if (
-      tailCompactions !== undefined &&
-      !Number.isNaN(tailCompactions) &&
-      tailCompactions > 0 &&
-      !afterMessageId
-    ) {
-      const sliced = sliceAtCompactBoundaries(
-        session.messages,
-        tailCompactions,
-        beforeMessageId,
-      );
-      session = { ...session, messages: sliced.messages };
-      paginationInfo = sliced.pagination;
-    }
-
-    // Keep persisted rendering in lockstep with stream augmentation behavior.
-    await augmentPersistedSessionMessages(session.messages);
 
     // Override context usage with SDK-reported context window from live process
     // The reader uses hardcoded defaults; the process captures the real value at runtime

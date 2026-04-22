@@ -20,6 +20,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { ConnectionBar } from "./components/ConnectionBar";
 import { HostOfflineModal } from "./components/HostOfflineModal";
+import { LoadingIndicator } from "./components/LoadingIndicator";
 import { ReloadBanner } from "./components/ReloadBanner";
 import { Modal } from "./components/ui/Modal";
 import { InboxProvider } from "./contexts/InboxContext";
@@ -31,9 +32,11 @@ import { SchemaValidationProvider } from "./contexts/SchemaValidationContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import { useNeedsAttentionBadge } from "./hooks/useNeedsAttentionBadge";
 import { useSyncNotifyInAppSetting } from "./hooks/useNotifyInApp";
+import { usePwaInstall } from "./hooks/usePwaInstall";
 import { useReloadNotifications } from "./hooks/useReloadNotifications";
 import { useRemoteActivityBusConnection } from "./hooks/useRemoteActivityBusConnection";
 import { useRemoteBasePath } from "./hooks/useRemoteBasePath";
+import { useServiceWorkerRegistration } from "./hooks/useServiceWorkerRegistration";
 import { useVersion } from "./hooks/useVersion";
 import { connectionManager } from "./lib/connection";
 import { initClientLogCollection } from "./lib/diagnostics";
@@ -167,10 +170,10 @@ export function ConnectionGate() {
   // This preserves the current URL so we stay on the same page after successful resume
   if (isAutoResuming) {
     return (
-      <div className="auto-resume-loading">
-        <div className="loading-spinner" />
-        <p>Reconnecting...</p>
-      </div>
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label="Reconnecting"
+      />
     );
   }
 
@@ -225,6 +228,8 @@ function RemoteAppInner({ children }: Props) {
  */
 export function RemoteApp({ children }: Props) {
   useEffect(() => initClientLogCollection(), []);
+  useServiceWorkerRegistration();
+  usePwaInstall();
   useSyncNotifyInAppSetting();
 
   return (

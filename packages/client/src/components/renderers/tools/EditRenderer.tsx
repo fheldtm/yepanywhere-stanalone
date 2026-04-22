@@ -8,6 +8,7 @@ import {
   getErrorClassSuffix,
   isUserRejection,
 } from "../../../lib/classifyToolError";
+import { compactShikiLineWhitespace } from "../../../lib/shikiHtml";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
 import { Modal } from "../../ui/Modal";
@@ -155,13 +156,14 @@ const HighlightedDiff = memo(function HighlightedDiff({
   // The HTML is wrapped in <pre class="shiki"><code>...</code></pre>
   // Each line is a <span class="line ...">...</span>
   const htmlToRender = useMemo(() => {
-    if (!truncateLines) return diffHtml;
+    const compactedHtml = compactShikiLineWhitespace(diffHtml);
+    if (!truncateLines) return compactedHtml;
 
     // Parse and truncate by counting line spans
     // Match any span with class starting with "line" (e.g. "line", "line line-deleted")
     const lineRegex = /<span class="line[^"]*">/g;
-    const matches = [...diffHtml.matchAll(lineRegex)];
-    if (matches.length <= truncateLines) return diffHtml;
+    const matches = [...compactedHtml.matchAll(lineRegex)];
+    if (matches.length <= truncateLines) return compactedHtml;
 
     // Find the position to truncate at (after truncateLines lines)
     const lastMatch = matches[truncateLines - 1];
@@ -169,11 +171,11 @@ const HighlightedDiff = memo(function HighlightedDiff({
 
     // Find the closing </span> for this line
     const startPos = (lastMatch.index ?? 0) + lastMatch[0].length;
-    const closeSpanPos = diffHtml.indexOf("</span>", startPos);
-    if (closeSpanPos === -1) return diffHtml;
+    const closeSpanPos = compactedHtml.indexOf("</span>", startPos);
+    if (closeSpanPos === -1) return compactedHtml;
 
     // Truncate and close tags
-    return `${diffHtml.slice(0, closeSpanPos + 7)}</code></pre>`;
+    return `${compactedHtml.slice(0, closeSpanPos + 7)}</code></pre>`;
   }, [diffHtml, truncateLines]);
 
   return (

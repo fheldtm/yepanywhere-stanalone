@@ -5,11 +5,76 @@ export type FontFamilyTarget = "system" | "conversation" | "code";
 
 export type FontFamilySettings = Record<FontFamilyTarget, string>;
 
+export interface FontFamilyPreset {
+  label: string;
+  value: string;
+}
+
+export const SYSTEM_FONT_PRESETS: FontFamilyPreset[] = [
+  {
+    label: "Pretendard",
+    value: '"Pretendard", "Noto Sans KR", system-ui, sans-serif',
+  },
+  {
+    label: "Noto Sans KR",
+    value: '"Noto Sans KR", system-ui, sans-serif',
+  },
+  {
+    label: "SUIT",
+    value: '"SUIT", "Noto Sans KR", system-ui, sans-serif',
+  },
+  {
+    label: "IBM Plex Sans KR",
+    value: '"IBM Plex Sans KR", "Noto Sans KR", system-ui, sans-serif',
+  },
+  {
+    label: "System Default",
+    value:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
+  },
+];
+
+export const CONVERSATION_FONT_PRESETS: FontFamilyPreset[] = [
+  ...SYSTEM_FONT_PRESETS.filter((preset) => preset.label !== "System Default"),
+];
+
+export const CODE_FONT_PRESETS: FontFamilyPreset[] = [
+  {
+    label: "JetBrains Mono",
+    value:
+      '"JetBrains Mono", "D2Coding", "D2 coding", "Cascadia Code", monospace',
+  },
+  {
+    label: "D2Coding",
+    value:
+      '"D2Coding", "D2 coding", "JetBrains Mono", "Cascadia Code", monospace',
+  },
+  {
+    label: "Fira Code",
+    value: '"Fira Code", "D2Coding", "D2 coding", "Cascadia Code", monospace',
+  },
+  {
+    label: "Cascadia Code",
+    value:
+      '"Cascadia Code", "D2Coding", "D2 coding", "JetBrains Mono", monospace',
+  },
+  {
+    label: "SF Mono / Monaco",
+    value: '"SF Mono", Monaco, "Cascadia Code", Consolas, monospace',
+  },
+];
+
+export const FONT_FAMILY_PRESETS: Record<FontFamilyTarget, FontFamilyPreset[]> =
+  {
+    system: SYSTEM_FONT_PRESETS,
+    conversation: CONVERSATION_FONT_PRESETS,
+    code: CODE_FONT_PRESETS,
+  };
+
 export const DEFAULT_FONT_FAMILIES: FontFamilySettings = {
-  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
-  conversation:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", sans-serif',
-  code: '"SF Mono", Monaco, "Cascadia Code", Consolas, monospace',
+  system: SYSTEM_FONT_PRESETS[0]?.value ?? "",
+  conversation: CONVERSATION_FONT_PRESETS[0]?.value ?? "",
+  code: CODE_FONT_PRESETS[0]?.value ?? "",
 };
 
 function cleanFontFamily(value: string): string {
@@ -19,18 +84,29 @@ function cleanFontFamily(value: string): string {
     .trim();
 }
 
+function getPresetValue(target: FontFamilyTarget, value: string): string {
+  const cleaned = cleanFontFamily(value);
+  const presets = FONT_FAMILY_PRESETS[target];
+  return (
+    presets.find((preset) => preset.value === cleaned)?.value ??
+    DEFAULT_FONT_FAMILIES[target]
+  );
+}
+
 function loadFontFamilies(): FontFamilySettings {
   return {
-    system:
-      cleanFontFamily(localStorage.getItem(UI_KEYS.systemFontFamily) ?? "") ||
-      DEFAULT_FONT_FAMILIES.system,
-    conversation:
-      cleanFontFamily(
-        localStorage.getItem(UI_KEYS.conversationFontFamily) ?? "",
-      ) || DEFAULT_FONT_FAMILIES.conversation,
-    code:
-      cleanFontFamily(localStorage.getItem(UI_KEYS.codeFontFamily) ?? "") ||
-      DEFAULT_FONT_FAMILIES.code,
+    system: getPresetValue(
+      "system",
+      localStorage.getItem(UI_KEYS.systemFontFamily) ?? "",
+    ),
+    conversation: getPresetValue(
+      "conversation",
+      localStorage.getItem(UI_KEYS.conversationFontFamily) ?? "",
+    ),
+    code: getPresetValue(
+      "code",
+      localStorage.getItem(UI_KEYS.codeFontFamily) ?? "",
+    ),
   };
 }
 
@@ -75,9 +151,9 @@ export function useFontFamily() {
 
   const setFontFamily = useCallback(
     (target: FontFamilyTarget, value: string) => {
-      const cleaned = cleanFontFamily(value);
-      setFontFamilies((current) => ({ ...current, [target]: cleaned }));
-      saveFontFamily(target, cleaned);
+      const presetValue = getPresetValue(target, value);
+      setFontFamilies((current) => ({ ...current, [target]: presetValue }));
+      saveFontFamily(target, presetValue);
     },
     [],
   );

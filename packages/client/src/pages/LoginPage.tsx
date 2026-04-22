@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { YepAnywhereLogo } from "../components/YepAnywhereLogo";
 import { useAuth } from "../contexts/AuthContext";
 import { useI18n } from "../i18n";
@@ -81,11 +82,10 @@ export function LoginPage() {
 
   if (isLoading) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-loading">{t("loginLoading")}</div>
-        </div>
-      </div>
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("loginLoading")}
+      />
     );
   }
 

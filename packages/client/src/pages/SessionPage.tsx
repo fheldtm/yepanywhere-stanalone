@@ -2,6 +2,7 @@ import type { ProviderName, UploadedFile } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { MessageInput, type UploadProgress } from "../components/MessageInput";
 import { MessageInputToolbar } from "../components/MessageInputToolbar";
 import { MessageList } from "../components/MessageList";
@@ -679,12 +680,11 @@ function SessionPageContent({
 
   // If process is actively in-turn or waiting for input, don't mark tools as orphaned.
   // "orphanedToolUseIds" from server just means "no result yet" - but if the process is
-  // in-turn (e.g., executing a Task subagent) or waiting for approval, they're not orphaned.
+  // waiting for approval, they're not orphaned.
   // Also suppress orphan marking when the session stream is disconnected - we can't trust
   // processState without the stream, so show tools as pending (spinner) rather than
   // incorrectly marking them as interrupted.
   const activeToolApproval =
-    processState === "in-turn" ||
     processState === "waiting-input" ||
     (hasSessionUpdateStream && !sessionUpdatesConnected);
 
@@ -853,6 +853,15 @@ function SessionPageContent({
       showToast(msg, "error");
     }
   }, [displayTitle, showToast, t]);
+
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("sessionLoading")}
+      />
+    );
+  }
 
   if (error)
     return (
@@ -1090,43 +1099,39 @@ function SessionPageContent({
         )}
 
         <main className="session-messages">
-          {loading ? (
-            <div className="loading">{t("sessionLoading")}</div>
-          ) : (
-            <SessionMetadataProvider
+          <SessionMetadataProvider
+            projectId={projectId}
+            projectPath={project?.path ?? null}
+            sessionId={sessionId}
+          >
+            <AgentContentProvider
+              agentContent={agentContent}
+              setAgentContent={setAgentContent}
+              toolUseToAgent={toolUseToAgent}
               projectId={projectId}
-              projectPath={project?.path ?? null}
               sessionId={sessionId}
             >
-              <AgentContentProvider
-                agentContent={agentContent}
-                setAgentContent={setAgentContent}
-                toolUseToAgent={toolUseToAgent}
-                projectId={projectId}
-                sessionId={sessionId}
-              >
-                <MessageList
-                  messages={messages}
-                  provider={session?.provider}
-                  isProcessing={
-                    status.owner === "self" && processState === "in-turn"
-                  }
-                  isCompacting={isCompacting}
-                  scrollTrigger={scrollTrigger}
-                  pendingMessages={pendingMessages}
-                  deferredMessages={deferredMessages}
-                  onCancelDeferred={(tempId) =>
-                    api.cancelDeferredMessage(sessionId, tempId)
-                  }
-                  markdownAugments={markdownAugments}
-                  activeToolApproval={activeToolApproval}
-                  hasOlderMessages={pagination?.hasOlderMessages}
-                  loadingOlder={loadingOlder}
-                  onLoadOlderMessages={loadOlderMessages}
-                />
-              </AgentContentProvider>
-            </SessionMetadataProvider>
-          )}
+              <MessageList
+                messages={messages}
+                provider={session?.provider}
+                isProcessing={
+                  status.owner === "self" && processState === "in-turn"
+                }
+                isCompacting={isCompacting}
+                scrollTrigger={scrollTrigger}
+                pendingMessages={pendingMessages}
+                deferredMessages={deferredMessages}
+                onCancelDeferred={(tempId) =>
+                  api.cancelDeferredMessage(sessionId, tempId)
+                }
+                markdownAugments={markdownAugments}
+                activeToolApproval={activeToolApproval}
+                hasOlderMessages={pagination?.hasOlderMessages}
+                loadingOlder={loadingOlder}
+                onLoadOlderMessages={loadOlderMessages}
+              />
+            </AgentContentProvider>
+          </SessionMetadataProvider>
         </main>
 
         <footer className="session-input">
@@ -1165,6 +1170,7 @@ function SessionPageContent({
                     onHoldChange={holdModeEnabled ? setHold : undefined}
                     supportsPermissionMode={supportsPermissionMode}
                     supportsThinkingToggle={supportsThinkingToggle}
+                    provider={effectiveProvider}
                     contextUsage={session?.contextUsage}
                     isRunning={status.owner === "self"}
                     isThinking={processState === "in-turn"}
@@ -1207,6 +1213,7 @@ function SessionPageContent({
                 onHoldChange={holdModeEnabled ? setHold : undefined}
                 supportsPermissionMode={supportsPermissionMode}
                 supportsThinkingToggle={supportsThinkingToggle}
+                provider={effectiveProvider}
                 isRunning={status.owner === "self"}
                 isThinking={processState === "in-turn"}
                 onStop={handleAbort}

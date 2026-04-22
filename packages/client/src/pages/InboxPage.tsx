@@ -1,7 +1,9 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { InboxContent } from "../components/InboxContent";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { PageHeader } from "../components/PageHeader";
+import { useInboxContext } from "../contexts/InboxContext";
 import { useProjects } from "../hooks/useProjects";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
@@ -14,6 +16,7 @@ export function InboxPage() {
   const { t } = useI18n();
   const { openSidebar, isWideScreen } = useNavigationLayout();
   const { projects } = useProjects();
+  const { loading } = useInboxContext();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const projectId = searchParams.get("project") ?? undefined;
@@ -34,6 +37,15 @@ export function InboxPage() {
     if (!projectId) return undefined;
     return projects.find((p) => p.id === projectId)?.name;
   }, [projectId, projects]);
+
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("inboxLoading")}
+      />
+    );
+  }
 
   return (
     <div

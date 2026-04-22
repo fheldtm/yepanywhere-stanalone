@@ -114,6 +114,30 @@ export interface GlobalSessionsResponse {
   projects: ProjectOption[];
 }
 
+export interface FilesystemRoot {
+  label: string;
+  path: string;
+}
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  isHidden: boolean;
+  isEmpty: boolean;
+  canRename: boolean;
+  canDelete: boolean;
+}
+
+export interface DirectoryListing {
+  directory: {
+    name: string;
+    path: string;
+    parentPath: string | null;
+    isRoot: boolean;
+  };
+  entries: DirectoryEntry[];
+}
+
 export interface SessionOptions {
   mode?: PermissionMode;
   /** Model ID (e.g., "sonnet", "opus", "qwen2.5-coder:0.5b") */
@@ -363,14 +387,40 @@ export const api = {
    * Validates the path exists on disk and returns project info.
    * Supports ~ for home directory and normalizes trailing slashes.
    */
-  addProject: (path: string) =>
+  addProject: (path: string, options?: { create?: boolean }) =>
     fetchJSON<{ project: Project }>("/projects", {
       method: "POST",
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, create: options?.create }),
     }),
 
   getProject: (projectId: string) =>
     fetchJSON<{ project: Project }>(`/projects/${projectId}`),
+
+  getFilesystemRoots: () =>
+    fetchJSON<{ roots: FilesystemRoot[] }>("/filesystem/roots"),
+
+  getDirectories: (path: string) =>
+    fetchJSON<DirectoryListing>(
+      `/filesystem/directories?path=${encodeURIComponent(path)}`,
+    ),
+
+  createDirectory: (parentPath: string, name: string) =>
+    fetchJSON<{ entry: DirectoryEntry }>("/filesystem/directories", {
+      method: "POST",
+      body: JSON.stringify({ parentPath, name }),
+    }),
+
+  renameDirectory: (path: string, name: string) =>
+    fetchJSON<{ entry: DirectoryEntry }>("/filesystem/directories", {
+      method: "PATCH",
+      body: JSON.stringify({ path, name }),
+    }),
+
+  deleteDirectory: (path: string) =>
+    fetchJSON<{ deleted: boolean }>(
+      `/filesystem/directories?path=${encodeURIComponent(path)}`,
+      { method: "DELETE" },
+    ),
 
   getSession: (
     projectId: string,

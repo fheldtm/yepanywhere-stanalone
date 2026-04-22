@@ -1,3 +1,6 @@
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { UrlProjectId } from "@yep-anywhere/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { ProjectScanner } from "../../src/projects/scanner.js";
@@ -35,6 +38,42 @@ function createSummary(): SessionSummary {
 }
 
 describe("Projects Routes", () => {
+  it("creates and persists a project directory when requested", async () => {
+    const root = await mkdtemp(join(tmpdir(), "yep-project-route-"));
+    const projectPath = join(root, "new-project");
+    const project = { ...createProject(), path: projectPath };
+    const addProject = vi.fn(async () => undefined);
+    const invalidateCache = vi.fn();
+
+    try {
+      const routes = createProjectsRoutes({
+        scanner: {
+          getOrCreateProject: vi.fn(async () => project),
+          invalidateCache,
+        } as unknown as ProjectScanner,
+        readerFactory: vi.fn(),
+        projectMetadataService: {
+          addProject,
+        } as unknown as NonNullable<
+          Parameters<typeof createProjectsRoutes>[0]["projectMetadataService"]
+        >,
+      });
+
+      const response = await routes.request("/", {
+        method: "POST",
+        body: JSON.stringify({ path: projectPath, create: true }),
+      });
+
+      expect(response.status).toBe(200);
+      const stats = await stat(projectPath);
+      expect(stats.isDirectory()).toBe(true);
+      expect(addProject).toHaveBeenCalled();
+      expect(invalidateCache).toHaveBeenCalled();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("lists mixed-provider sessions through the shared provider resolver", async () => {
     const project = createProject();
     const summary = createSummary();

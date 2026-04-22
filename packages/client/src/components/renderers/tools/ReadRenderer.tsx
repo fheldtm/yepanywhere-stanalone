@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
+import { compactShikiLineWhitespace } from "../../../lib/shikiHtml";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
 import { Modal } from "../../ui/Modal";
@@ -139,7 +140,9 @@ function FileModalContent({
           <div
             className="shiki-container"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
-            dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+            dangerouslySetInnerHTML={{
+              __html: compactShikiLineWhitespace(highlightedHtml),
+            }}
           />
           {highlightedTruncated && (
             <div className="file-viewer-truncated">

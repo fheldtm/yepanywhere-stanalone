@@ -98,6 +98,7 @@ export class SessionIndexService implements ISessionIndexService {
   private inFlightSessionLoads: Map<string, Promise<SessionSummary[]>> =
     new Map();
   private inFlightTitleLoads: Map<string, Promise<string | null>> = new Map();
+  private backgroundFullValidations: Map<string, Promise<void>> = new Map();
   private cacheStats = {
     requests: 0,
     fastHits: 0,
@@ -873,6 +874,26 @@ export class SessionIndexService implements ISessionIndexService {
       return summaries;
     }
 
+    // Stale-while-revalidate path: if we have a persisted index and no watcher
+    // dirty signals, keep requests fast and refresh the index in the background.
+    if (
+      this.fullValidationIntervalMs > 0 &&
+      fullValidationDue &&
+      !hasDirDirty &&
+      !hasDirtySessions &&
+      Object.keys(index.sessions).length > 0
+    ) {
+      this.scheduleBackgroundFullValidation(
+        sessionDir,
+        projectId,
+        reader,
+        index,
+      );
+      const summaries = this.buildSummariesFromIndex(index, projectId);
+      this.recordCallStats("fast", Date.now() - start, 0, 0, sessionDir);
+      return summaries;
+    }
+
     // Incremental path: only specific sessions are dirty.
     if (!fullValidationDue && !hasDirDirty && hasDirtySessions) {
       const incremental = await this.applyIncrementalDirtyUpdates(
@@ -909,6 +930,44 @@ export class SessionIndexService implements ISessionIndexService {
       sessionDir,
     );
     return full.summaries;
+  }
+
+  private scheduleBackgroundFullValidation(
+    sessionDir: string,
+    projectId: UrlProjectId,
+    reader: ISessionReader,
+    index: SessionIndexState,
+  ): void {
+    const loadKey = this.getScopedLoadKey(sessionDir, projectId, reader);
+    if (this.backgroundFullValidations.has(loadKey)) return;
+
+    const start = Date.now();
+    const promise = this.runFullValidation(sessionDir, projectId, reader, index)
+      .then((full) => {
+        this.recordCallStats(
+          "full",
+          Date.now() - start,
+          full.statCalls,
+          full.parseCalls,
+          sessionDir,
+        );
+      })
+      .catch((error) => {
+        logger.warn(
+          { err: error },
+          `[SessionIndexService] Background validation failed for ${this.getScopeKey(
+            sessionDir,
+            reader,
+          )}`,
+        );
+      })
+      .finally(() => {
+        if (this.backgroundFullValidations.get(loadKey) === promise) {
+          this.backgroundFullValidations.delete(loadKey);
+        }
+      });
+
+    this.backgroundFullValidations.set(loadKey, promise);
   }
 
   /**

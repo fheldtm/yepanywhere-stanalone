@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { ContextUsageIndicator } from "../components/ContextUsageIndicator";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { PageHeader } from "../components/PageHeader";
 import { ThinkingIndicator } from "../components/ThinkingIndicator";
 import { type ProcessInfo, useProcesses } from "../hooks/useProcesses";
@@ -202,6 +203,15 @@ export function AgentsPage() {
   );
   const idleProcesses = processes.filter((p) => p.state === "idle");
 
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("agentsLoading" as never)}
+      />
+    );
+  }
+
   return (
     <div
       className={isWideScreen ? "main-content-wrapper" : "main-content-mobile"}
@@ -220,17 +230,13 @@ export function AgentsPage() {
 
         <main className="page-scroll-container">
           <div className="page-content-inner">
-            {loading && (
-              <p className="loading">{t("agentsLoading" as never)}</p>
-            )}
-
             {error && (
               <p className="error">
                 {t("agentsError" as never, { message: error.message })}
               </p>
             )}
 
-            {!loading && !error && (
+            {!error && (
               <>
                 <section className="agents-section">
                   <h2>{t("agentsSectionActive" as never)}</h2>

@@ -2,6 +2,7 @@ import { FilterDropdown } from "../../components/FilterDropdown";
 import { useDeveloperMode } from "../../hooks/useDeveloperMode";
 import {
   DEFAULT_FONT_FAMILIES,
+  FONT_FAMILY_PRESETS,
   type FontFamilyTarget,
   useFontFamily,
 } from "../../hooks/useFontFamily";
@@ -22,25 +23,23 @@ interface FontFamilySettingProps {
   target: FontFamilyTarget;
   title: string;
   description: string;
-  placeholder: string;
-  preview: string;
   value: string;
   setFontFamily: (target: FontFamilyTarget, value: string) => void;
-  resetFontFamily: (target: FontFamilyTarget) => void;
-  resetLabel: string;
 }
 
 function FontFamilySetting({
   target,
   title,
   description,
-  placeholder,
-  preview,
   value,
   setFontFamily,
-  resetFontFamily,
-  resetLabel,
 }: FontFamilySettingProps) {
+  const selectedValue = FONT_FAMILY_PRESETS[target].some(
+    (preset) => preset.value === value,
+  )
+    ? value
+    : DEFAULT_FONT_FAMILIES[target];
+
   return (
     <div className="settings-item font-family-setting">
       <div className="settings-item-info">
@@ -48,30 +47,20 @@ function FontFamilySetting({
         <p>{description}</p>
       </div>
       <div className="font-family-control">
-        <div className="font-family-input-row">
-          <input
-            className="font-family-input"
-            type="text"
-            value={value}
-            onChange={(event) => setFontFamily(target, event.target.value)}
-            placeholder={placeholder}
-            spellCheck={false}
-            aria-label={title}
-          />
-          <button
-            className="settings-button"
-            type="button"
-            onClick={() => resetFontFamily(target)}
-          >
-            {resetLabel}
-          </button>
-        </div>
-        <div
-          className={`font-family-preview font-family-preview-${target}`}
-          style={{ fontFamily: value || DEFAULT_FONT_FAMILIES[target] }}
-        >
-          {preview}
-        </div>
+        <FilterDropdown
+          label={title}
+          multiSelect={false}
+          align="right"
+          options={FONT_FAMILY_PRESETS[target].map((preset) => ({
+            value: preset.value,
+            label: preset.label,
+          }))}
+          selected={[selectedValue]}
+          onChange={(values) => {
+            const nextValue = values[0] ?? DEFAULT_FONT_FAMILIES[target];
+            setFontFamily(target, nextValue);
+          }}
+        />
       </div>
     </div>
   );
@@ -79,10 +68,16 @@ function FontFamilySetting({
 
 export function AppearanceSettings() {
   const { locale, setLocale, t } = useI18n();
-  const { fontFamilies, setFontFamily, resetFontFamily } = useFontFamily();
+  const { fontFamilies, setFontFamily } = useFontFamily();
   const { fontSize, setFontSize } = useFontSize();
   const { tabSize, setTabSize } = useTabSize();
-  const { theme, setTheme } = useTheme();
+  const {
+    theme,
+    setTheme,
+    customPalette,
+    setCustomPalette,
+    resetCustomPalette,
+  } = useTheme();
   const { streamingEnabled, setStreamingEnabled } = useStreamingEnabled();
   const { funPhrasesEnabled, setFunPhrasesEnabled } = useFunPhrases();
   const { showConnectionBars, setShowConnectionBars } = useDeveloperMode();
@@ -132,6 +127,45 @@ export function AppearanceSettings() {
             ))}
           </div>
         </div>
+        <div className="settings-item palette-setting">
+          <div className="settings-item-info">
+            <strong>{t("appearancePaletteTitle")}</strong>
+            <p>{t("appearancePaletteDescription")}</p>
+          </div>
+          <div className="palette-control">
+            <div className="palette-color-row">
+              <label className="palette-color-label">
+                <span>{t("appearancePaletteBaseColor")}</span>
+                <input
+                  className="palette-color-input"
+                  type="color"
+                  value={customPalette.baseColor}
+                  onChange={(event) =>
+                    setCustomPalette({ baseColor: event.target.value })
+                  }
+                  aria-label={t("appearancePaletteBaseColor")}
+                />
+              </label>
+              <span className="palette-color-value">
+                {customPalette.baseColor}
+              </span>
+              <button
+                className="settings-button"
+                type="button"
+                onClick={resetCustomPalette}
+              >
+                {t("appearancePaletteReset")}
+              </button>
+            </div>
+            <div className="palette-preview-strip" aria-hidden="true">
+              <span className="palette-preview-swatch palette-preview-surface" />
+              <span className="palette-preview-swatch palette-preview-secondary" />
+              <span className="palette-preview-swatch palette-preview-hover" />
+              <span className="palette-preview-swatch palette-preview-message" />
+              <span className="palette-preview-swatch palette-preview-accent" />
+            </div>
+          </div>
+        </div>
         <div className="settings-item">
           <div className="settings-item-info">
             <strong>{t("appearanceFontSizeTitle")}</strong>
@@ -154,34 +188,22 @@ export function AppearanceSettings() {
           target="system"
           title={t("appearanceSystemFontTitle")}
           description={t("appearanceSystemFontDescription")}
-          placeholder={t("appearanceSystemFontPlaceholder")}
-          preview={t("appearanceSystemFontPreview")}
           value={fontFamilies.system}
           setFontFamily={setFontFamily}
-          resetFontFamily={resetFontFamily}
-          resetLabel={t("appearanceFontReset")}
         />
         <FontFamilySetting
           target="conversation"
           title={t("appearanceConversationFontTitle")}
           description={t("appearanceConversationFontDescription")}
-          placeholder={t("appearanceConversationFontPlaceholder")}
-          preview={t("appearanceConversationFontPreview")}
           value={fontFamilies.conversation}
           setFontFamily={setFontFamily}
-          resetFontFamily={resetFontFamily}
-          resetLabel={t("appearanceFontReset")}
         />
         <FontFamilySetting
           target="code"
           title={t("appearanceCodeFontTitle")}
           description={t("appearanceCodeFontDescription")}
-          placeholder={t("appearanceCodeFontPlaceholder")}
-          preview={t("appearanceCodeFontPreview")}
           value={fontFamilies.code}
           setFontFamily={setFontFamily}
-          resetFontFamily={resetFontFamily}
-          resetLabel={t("appearanceFontReset")}
         />
         <div className="settings-item">
           <div className="settings-item-info">

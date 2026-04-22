@@ -43,6 +43,7 @@ import { createDebugStreamingRoutes } from "./routes/debug-streaming.js";
 import { createDevRoutes } from "./routes/dev.js";
 import { createDeviceRoutes } from "./routes/devices.js";
 import { createFilesRoutes } from "./routes/files.js";
+import { createFilesystemRoutes } from "./routes/filesystem.js";
 import { createGitStatusRoutes } from "./routes/git-status.js";
 import { createGlobalSessionsRoutes } from "./routes/global-sessions.js";
 import { health } from "./routes/health.js";
@@ -75,6 +76,7 @@ import type { NetworkBindingService } from "./services/NetworkBindingService.js"
 import type { RelayClientService } from "./services/RelayClientService.js";
 import type { ServerSettingsService } from "./services/ServerSettingsService.js";
 import type { SharingService } from "./services/SharingService.js";
+import type { SessionDetailCache } from "./session-cache/index.js";
 import { CodexSessionReader } from "./sessions/codex-reader.js";
 import { GeminiSessionReader } from "./sessions/gemini-reader.js";
 import { OpenCodeSessionReader } from "./sessions/opencode-reader.js";
@@ -107,6 +109,8 @@ export interface AppOptions {
   projectMetadataService?: ProjectMetadataService;
   /** SessionIndexService for caching session summaries */
   sessionIndexService?: SessionIndexService;
+  /** SessionDetailCache for caching normalized persisted session details */
+  sessionDetailCache?: SessionDetailCache;
   /** Project scanner cache TTL in ms (0 = rescan every request). */
   projectScanCacheTtlMs?: number;
   /** Maximum concurrent workers. 0 = unlimited (default) */
@@ -555,6 +559,7 @@ export function createApp(options: AppOptions): AppResult {
       geminiReaderFactory,
       serverSettingsService: options.serverSettingsService,
       modelInfoService: options.modelInfoService,
+      sessionDetailCache: options.sessionDetailCache,
     }),
   );
   app.route(
@@ -635,6 +640,9 @@ export function createApp(options: AppOptions): AppResult {
 
   // Files routes (file browser)
   app.route("/api/projects", createFilesRoutes({ scanner }));
+
+  // Filesystem routes (directory picker for project selection)
+  app.route("/api/filesystem", createFilesystemRoutes({ scanner }));
 
   // Git status routes
   app.route("/api/projects", createGitStatusRoutes({ scanner }));

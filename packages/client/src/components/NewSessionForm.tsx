@@ -3,6 +3,7 @@ import {
   type ProviderName,
   resolveModel,
 } from "@yep-anywhere/shared";
+import { Clock, Command, Paperclip, SendHorizontal } from "lucide-react";
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -34,9 +35,10 @@ import { useRemoteExecutors } from "../hooks/useRemoteExecutors";
 import { useServerSettings } from "../hooks/useServerSettings";
 import { useI18n } from "../i18n";
 import { hasCoarsePointer } from "../lib/deviceDetection";
-import type { PermissionMode } from "../types";
-import { FilterDropdown, type FilterOption } from "./FilterDropdown";
+import type { PermissionMode, Project } from "../types";
+import { type ComboboxOption, ComboboxSelect } from "./ComboboxSelect";
 import { clearFabPrefill, getFabPrefill } from "./FloatingActionButton";
+import { NewSessionProjectPicker } from "./NewSessionProjectPicker";
 import { VoiceInputButton, type VoiceInputButtonRef } from "./VoiceInputButton";
 
 interface PendingFile {
@@ -82,6 +84,9 @@ function getPreferredModelId(
 
 export interface NewSessionFormProps {
   projectId: string;
+  project?: Project | null;
+  onProjectChange?: (project: Project) => void;
+  onProjectAdded?: () => Promise<void> | void;
   /** Whether to focus the textarea on mount (default: true) */
   autoFocus?: boolean;
   /** Number of rows for the textarea (default: 6) */
@@ -94,6 +99,9 @@ export interface NewSessionFormProps {
 
 export function NewSessionForm({
   projectId,
+  project = null,
+  onProjectChange,
+  onProjectAdded,
   autoFocus = true,
   rows = 6,
   placeholder,
@@ -146,18 +154,24 @@ export function NewSessionForm({
     useRemoteExecutors();
   const availableProviders = getAvailableProviders(providers);
   const resolvedPlaceholder = placeholder ?? t("newSessionPlaceholder");
-  const modeLabels: Record<PermissionMode, string> = {
-    default: t("modeDefaultLabel"),
-    acceptEdits: t("modeAcceptEditsLabel"),
-    plan: t("modePlanLabel"),
-    bypassPermissions: t("modeBypassPermissionsLabel"),
-  };
-  const modeDescriptions: Record<PermissionMode, string> = {
-    default: t("modeDefaultDescription"),
-    acceptEdits: t("modeAcceptEditsDescription"),
-    plan: t("modePlanDescription"),
-    bypassPermissions: t("modeBypassPermissionsDescription"),
-  };
+  const modeLabels = useMemo<Record<PermissionMode, string>>(
+    () => ({
+      default: t("modeDefaultLabel"),
+      acceptEdits: t("modeAcceptEditsLabel"),
+      plan: t("modePlanLabel"),
+      bypassPermissions: t("modeBypassPermissionsLabel"),
+    }),
+    [t],
+  );
+  const modeDescriptions = useMemo<Record<PermissionMode, string>>(
+    () => ({
+      default: t("modeDefaultDescription"),
+      acceptEdits: t("modeAcceptEditsDescription"),
+      plan: t("modePlanDescription"),
+      bypassPermissions: t("modeBypassPermissionsDescription"),
+    }),
+    [t],
+  );
 
   // Get models and capabilities for the currently selected provider
   const selectedProviderInfo = providers.find(
@@ -223,8 +237,7 @@ export function NewSessionForm({
     }
   };
 
-  // Build model options for FilterDropdown
-  const modelOptions = useMemo((): FilterOption<string>[] => {
+  const modelOptions = useMemo((): ComboboxOption<string>[] => {
     return availableModels.map((model) => {
       const label = model.size
         ? `${model.name} (${(model.size / (1024 * 1024 * 1024)).toFixed(1)} GB)`
@@ -242,14 +255,44 @@ export function NewSessionForm({
         if (parts.length > 0) description = parts.join(" · ");
       }
 
-      return { value: model.id, label, description };
+      return {
+        value: model.id,
+        label,
+        description,
+        searchText: `${model.id} ${label} ${description ?? ""}`,
+      };
     });
   }, [availableModels]);
 
-  // Handle model selection from FilterDropdown
-  const handleModelSelect = useCallback((selected: string[]) => {
-    setSelectedModel(selected[0] ?? null);
-  }, []);
+  const providerOptions = useMemo((): ComboboxOption<ProviderName>[] => {
+    return providers.map((p) => {
+      const isAvailable = p.installed && (p.authenticated || p.enabled);
+      const status = isAvailable
+        ? undefined
+        : !p.installed
+          ? t("newSessionProviderStatusNotInstalled")
+          : t("newSessionProviderStatusNotAuthenticated");
+      return {
+        value: p.name,
+        label: p.displayName,
+        description: p.user?.email ?? p.user?.name,
+        disabled: !isAvailable,
+        status,
+        colorClassName: `provider-${p.name}`,
+        searchText: `${p.name} ${p.displayName} ${p.user?.email ?? ""} ${p.user?.name ?? ""}`,
+      };
+    });
+  }, [providers, t]);
+
+  const modeOptions = useMemo(
+    (): ComboboxOption<PermissionMode>[] =>
+      MODE_ORDER.map((m) => ({
+        value: m,
+        label: modeLabels[m],
+        colorClassName: `mode-${m}`,
+      })),
+    [modeLabels],
+  );
 
   // Combined display text: committed text + interim transcript
   const displayText = interimTranscript
@@ -610,22 +653,12 @@ export function NewSessionForm({
           />
           <button
             type="button"
-            className="toolbar-button"
+            className="toolbar-button attach-toolbar-button"
             onClick={() => fileInputRef.current?.click()}
             disabled={isStarting}
             aria-label={t("newSessionAttachFiles")}
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
-            >
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
+            <Paperclip size={18} aria-hidden="true" />
           </button>
           <VoiceInputButton
             ref={voiceButtonRef}
@@ -650,44 +683,23 @@ export function NewSessionForm({
               }
               aria-label={t("newSessionThinkingMode", { mode: thinkingMode })}
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
+              <span className="thinking-toggle-icon">
+                <Clock size={18} aria-hidden="true" />
                 {thinkingMode === "auto" && (
-                  <g>
-                    <circle
-                      cx="19"
-                      cy="5"
-                      r="5.5"
-                      fill="currentColor"
-                      stroke="none"
-                    />
-                    <text
-                      x="19"
-                      y="5"
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                      fill="var(--bg-primary, #1a1a2e)"
-                      fontSize="8"
-                      fontWeight="700"
-                      fontFamily="system-ui, sans-serif"
-                      stroke="none"
-                    >
-                      A
-                    </text>
-                  </g>
+                  <span className="thinking-toggle-auto-badge">A</span>
                 )}
-              </svg>
+              </span>
+            </button>
+          )}
+          {selectedProviderInfo?.supportsSlashCommands && (
+            <button
+              type="button"
+              className="toolbar-button slash-command-button"
+              disabled
+              title={t("newSessionPromptToolsUnavailable" as never)}
+              aria-label={t("newSessionPromptTools" as never)}
+            >
+              <Command size={18} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -701,7 +713,7 @@ export function NewSessionForm({
           {isStarting ? (
             <span className="send-spinner" />
           ) : (
-            <span className="send-icon">↑</span>
+            <SendHorizontal size={16} aria-hidden="true" />
           )}
         </button>
       </div>
@@ -778,68 +790,72 @@ export function NewSessionForm({
         <p className="new-session-subtitle">{t("newSessionHeaderSubtitle")}</p>
       </div>
 
+      {onProjectChange && onProjectAdded && (
+        <NewSessionProjectPicker
+          currentProject={project}
+          isStarting={isStarting}
+          onProjectChange={onProjectChange}
+          onProjectAdded={onProjectAdded}
+        />
+      )}
+
       <div className="new-session-input-area">{inputArea}</div>
 
-      {/* Provider Selection */}
-      {!providersLoading && availableProviders.length > 1 && (
-        <div className="new-session-provider-section">
-          <h3>{t("newSessionProviderTitle")}</h3>
-          <div className="provider-options">
-            {providers.map((p) => {
-              const isAvailable = p.installed && (p.authenticated || p.enabled);
-              const isSelected = selectedProvider === p.name;
-              return (
-                <button
-                  key={p.name}
-                  type="button"
-                  className={`provider-option ${isSelected ? "selected" : ""} ${!isAvailable ? "disabled" : ""}`}
-                  onClick={() => isAvailable && handleProviderSelect(p.name)}
-                  disabled={isStarting || !isAvailable}
-                  title={
-                    !isAvailable
-                      ? t("newSessionProviderUnavailable", {
-                          provider: p.displayName,
-                          reason: !p.installed
-                            ? t("newSessionProviderNotInstalled")
-                            : t("newSessionProviderNotAuthenticated"),
-                        })
-                      : p.displayName
-                  }
-                >
-                  <span className={`provider-option-dot provider-${p.name}`} />
-                  <div className="provider-option-content">
-                    <span className="provider-option-label">
-                      {p.displayName}
-                    </span>
-                    {!isAvailable && (
-                      <span className="provider-option-status">
-                        {!p.installed
-                          ? t("newSessionProviderStatusNotInstalled")
-                          : t("newSessionProviderStatusNotAuthenticated")}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+      <div className="new-session-options-grid">
+        {!providersLoading && availableProviders.length > 1 && (
+          <div className="new-session-option-field">
+            <span className="new-session-field-label">
+              {t("newSessionProviderTitle")}
+            </span>
+            <ComboboxSelect
+              label={t("newSessionProviderTitle")}
+              options={providerOptions}
+              value={selectedProvider}
+              onChange={handleProviderSelect}
+              placeholder={t("newSessionProviderPlaceholder")}
+              searchPlaceholder={t("newSessionProviderSearchPlaceholder")}
+              emptyText={t("newSessionProviderNoResults")}
+              disabled={isStarting}
+            />
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Model Selection */}
-      {selectedProvider && modelOptions.length > 0 && (
-        <div className="new-session-model-section">
-          <h3>{t("newSessionModelTitle")}</h3>
-          <FilterDropdown
-            label={t("newSessionModelTitle")}
-            options={modelOptions}
-            selected={selectedModel ? [selectedModel] : []}
-            onChange={handleModelSelect}
-            multiSelect={false}
-            placeholder={t("newSessionModelPlaceholder")}
-          />
-        </div>
-      )}
+        {selectedProvider && modelOptions.length > 0 && (
+          <div className="new-session-option-field">
+            <span className="new-session-field-label">
+              {t("newSessionModelTitle")}
+            </span>
+            <ComboboxSelect
+              label={t("newSessionModelTitle")}
+              options={modelOptions}
+              value={selectedModel}
+              onChange={setSelectedModel}
+              placeholder={t("newSessionModelPlaceholder")}
+              searchPlaceholder={t("newSessionModelSearchPlaceholder")}
+              emptyText={t("newSessionModelNoResults")}
+              disabled={isStarting}
+            />
+          </div>
+        )}
+
+        {supportsPermissionMode && (
+          <div className="new-session-option-field">
+            <span className="new-session-field-label">
+              {t("newSessionModeTitle")}
+            </span>
+            <ComboboxSelect
+              label={t("newSessionModeTitle")}
+              options={modeOptions}
+              value={mode}
+              onChange={handleModeSelect}
+              placeholder={t("newSessionModeTitle")}
+              searchPlaceholder={t("newSessionModeSearchPlaceholder")}
+              emptyText={t("newSessionModeNoResults")}
+              disabled={isStarting}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Executor Selection - only show if remote executors are configured */}
       {!executorsLoading && remoteExecutors.length > 0 && (
@@ -884,53 +900,27 @@ export function NewSessionForm({
         </div>
       )}
 
-      {/* Permission Mode Selection - only for providers that support it */}
-      {supportsPermissionMode && (
-        <div className="new-session-mode-section">
-          <h3>{t("newSessionModeTitle")}</h3>
-          <div className="mode-options">
-            {MODE_ORDER.map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={`mode-option ${mode === m ? "selected" : ""}`}
-                onClick={() => handleModeSelect(m)}
-                disabled={isStarting}
-              >
-                <span className={`mode-option-dot mode-${m}`} />
-                <div className="mode-option-content">
-                  <span className="mode-option-label">{modeLabels[m]}</span>
-                  <span className="mode-option-desc">
-                    {modeDescriptions[m]}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="new-session-defaults-bar">
-            <p className="new-session-defaults-copy">
-              {t("newSessionDefaultsDescription")}
-            </p>
-            <button
-              type="button"
-              className="new-session-defaults-button"
-              onClick={handleSaveDefaults}
-              disabled={
-                isStarting ||
-                isSavingDefaults ||
-                settingsLoading ||
-                !selectedProvider ||
-                defaultsMatchCurrent
-              }
-            >
-              {isSavingDefaults
-                ? t("newSessionDefaultsSaving")
-                : t("newSessionDefaultsAction")}
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="new-session-defaults-bar">
+        <p className="new-session-defaults-copy">
+          {t("newSessionDefaultsDescription")}
+        </p>
+        <button
+          type="button"
+          className="new-session-defaults-button"
+          onClick={handleSaveDefaults}
+          disabled={
+            isStarting ||
+            isSavingDefaults ||
+            settingsLoading ||
+            !selectedProvider ||
+            defaultsMatchCurrent
+          }
+        >
+          {isSavingDefaults
+            ? t("newSessionDefaultsSaving")
+            : t("newSessionDefaultsAction")}
+        </button>
+      </div>
     </div>
   );
 }

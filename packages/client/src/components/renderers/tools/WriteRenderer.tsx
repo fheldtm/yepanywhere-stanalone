@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ZodError } from "zod";
 import { useSchemaValidationContext } from "../../../contexts/SchemaValidationContext";
+import { compactShikiLineWhitespace } from "../../../lib/shikiHtml";
 import { validateToolResult } from "../../../lib/validateToolResult";
 import { SchemaWarning } from "../../SchemaWarning";
 import { Modal } from "../../ui/Modal";
@@ -37,8 +38,9 @@ function getFileName(filePath: string): string {
  * Shiki output wraps each line in <span class="line">.
  */
 function truncateHighlightedHtml(html: string, maxLines: number): string {
-  const lines = html.split('<span class="line">');
-  if (lines.length <= maxLines + 1) return html;
+  const compactedHtml = compactShikiLineWhitespace(html);
+  const lines = compactedHtml.split('<span class="line">');
+  if (lines.length <= maxLines + 1) return compactedHtml;
 
   // Rebuild with only maxLines worth of lines
   const truncated = lines.slice(0, maxLines + 1).join('<span class="line">');
@@ -121,7 +123,9 @@ function WriteModalContent({
           <div
             className="shiki-container"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
-            dangerouslySetInnerHTML={{ __html: input._highlightedContentHtml }}
+            dangerouslySetInnerHTML={{
+              __html: compactShikiLineWhitespace(input._highlightedContentHtml),
+            }}
           />
           {input._highlightedTruncated && (
             <div className="file-viewer-truncated">
@@ -227,7 +231,9 @@ function WriteToolResult({
           <div
             className="shiki-container"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
-            dangerouslySetInnerHTML={{ __html: input._highlightedContentHtml }}
+            dangerouslySetInnerHTML={{
+              __html: compactShikiLineWhitespace(input._highlightedContentHtml),
+            }}
           />
           {input._highlightedTruncated && (
             <div className="file-viewer-truncated">

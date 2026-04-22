@@ -215,10 +215,14 @@ export function SidebarNavItem({
       onClick={onClick}
       title={title ?? label}
     >
-      {icon}
+      <span className="sidebar-nav-icon">
+        {icon}
+        {hasActivityIndicator && (
+          <ThinkingIndicator className="sidebar-nav-activity" />
+        )}
+      </span>
       <span className="sidebar-nav-text">{label}</span>
       {hasDraft && <span className="session-draft-badge">(draft)</span>}
-      {hasActivityIndicator && <ThinkingIndicator />}
       {badge !== undefined && badge > 0 && (
         <span className="sidebar-nav-badge">{badge}</span>
       )}

@@ -1,6 +1,7 @@
+import { Command } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface SlashCommandButtonProps {
+interface PromptToolsButtonProps {
   /** Available slash commands (without the "/" prefix) */
   commands: string[];
   /** Callback when a command is selected */
@@ -10,14 +11,14 @@ interface SlashCommandButtonProps {
 }
 
 /**
- * Button that shows available slash commands in a dropdown menu.
- * Selecting a command inserts "/{command}" into the message input.
+ * Button that shows prompt tools such as slash commands and skills.
+ * Selecting a command inserts its prompt syntax into the message input.
  */
-export function SlashCommandButton({
+export function PromptToolsButton({
   commands,
   onSelectCommand,
   disabled,
-}: SlashCommandButtonProps) {
+}: PromptToolsButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -77,19 +78,19 @@ export function SlashCommandButton({
         className={`slash-command-button ${isOpen ? "active" : ""}`}
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        title="Slash commands"
-        aria-label="Show slash commands"
+        title="Prompt tools"
+        aria-label="Show prompt tools"
         aria-expanded={isOpen}
         aria-haspopup="menu"
       >
-        <span className="slash-icon">/</span>
+        <Command size={16} aria-hidden="true" />
       </button>
       {isOpen && (
         <div
           ref={menuRef}
           className="slash-command-menu"
           role="menu"
-          aria-label="Slash commands"
+          aria-label="Prompt tools"
         >
           {commands.map((command) => (
             <button

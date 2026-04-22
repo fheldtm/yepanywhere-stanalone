@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, useParams } from "react-router-dom";
 import { ConnectedAppContent } from "../RemoteApp";
 import { HostOfflineModal } from "../components/HostOfflineModal";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import {
   type AutoResumeError,
   useRemoteConnection,
@@ -228,10 +229,10 @@ export function RelayConnectionGate() {
     case "checking":
     case "connecting":
       return (
-        <div className="auto-resume-loading">
-          <div className="loading-spinner" />
-          <p>Connecting to {relayUsername}...</p>
-        </div>
+        <LoadingIndicator
+          className="loading-indicator-page"
+          label={`Connecting to ${relayUsername}`}
+        />
       );
 
     case "no_host":

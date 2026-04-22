@@ -205,6 +205,7 @@ function convertCodexEntries(
   let messageIndex = 0;
   const hasResponseItemUser = hasCodexResponseItemUserMessages(entries);
   const toolCallContexts = new Map<string, CodexToolCallContext>();
+  const orphanedToolCallIds = findOrphanedCodexToolCallIds(entries);
 
   for (const entry of entries) {
     if (entry.type === "response_item") {
@@ -212,6 +213,7 @@ function convertCodexEntries(
         entry,
         messageIndex++,
         toolCallContexts,
+        orphanedToolCallIds,
       );
       if (msg) {
         if (isCodexCorrelationDebugEnabled()) {
@@ -364,10 +366,61 @@ function hasCodexResponseItemUserMessages(
   );
 }
 
+function findOrphanedCodexToolCallIds(
+  entries: CodexSessionEntry[],
+): Set<string> {
+  const lastTaskStartedIndex = entries.reduce(
+    (latest, entry, index) =>
+      entry.type === "event_msg" && entry.payload.type === "task_started"
+        ? index
+        : latest,
+    -1,
+  );
+  const outputCallIds = new Set<string>();
+  for (const entry of entries) {
+    if (
+      entry.type === "response_item" &&
+      (entry.payload.type === "function_call_output" ||
+        entry.payload.type === "custom_tool_call_output")
+    ) {
+      const callId = entry.payload.call_id;
+      if (typeof callId === "string") {
+        outputCallIds.add(callId);
+      }
+    }
+  }
+
+  const orphaned = new Set<string>();
+  entries.forEach((entry, index) => {
+    if (index >= lastTaskStartedIndex) return;
+    if (entry.type !== "response_item") return;
+    if (
+      entry.payload.type !== "function_call" &&
+      entry.payload.type !== "custom_tool_call" &&
+      entry.payload.type !== "web_search_call"
+    ) {
+      return;
+    }
+
+    const callId =
+      "call_id" in entry.payload && typeof entry.payload.call_id === "string"
+        ? entry.payload.call_id
+        : "id" in entry.payload && typeof entry.payload.id === "string"
+          ? entry.payload.id
+          : undefined;
+    if (callId && !outputCallIds.has(callId)) {
+      orphaned.add(callId);
+    }
+  });
+
+  return orphaned;
+}
+
 function convertCodexResponseItem(
   entry: CodexResponseItemEntry,
   index: number,
   toolCallContexts: Map<string, CodexToolCallContext>,
+  orphanedToolCallIds: Set<string>,
 ): Message | null {
   const payload = entry.payload;
   const uuid = `codex-${index}-${entry.timestamp}`;
@@ -387,6 +440,7 @@ function convertCodexResponseItem(
         payload,
         uuid,
         entry.timestamp,
+        orphanedToolCallIds.has(payload.call_id),
       );
       toolCallContexts.set(converted.callId, converted.context);
       return converted.message;
@@ -406,6 +460,7 @@ function convertCodexResponseItem(
         payload,
         uuid,
         entry.timestamp,
+        orphanedToolCallIds,
       );
       toolCallContexts.set(converted.callId, converted.context);
       return converted.message;
@@ -423,7 +478,12 @@ function convertCodexResponseItem(
     }
 
     case "web_search_call":
-      return convertCodexWebSearchCallPayload(payload, uuid, entry.timestamp);
+      return convertCodexWebSearchCallPayload(
+        payload,
+        uuid,
+        entry.timestamp,
+        orphanedToolCallIds,
+      );
 
     case "ghost_snapshot":
       return null;
@@ -577,6 +637,7 @@ function convertCodexFunctionCallPayload(
   payload: CodexFunctionCallPayload,
   uuid: string,
   timestamp: string,
+  isOrphaned = false,
 ): CodexToolUseConversion {
   const rawToolName = payload.name;
   const canonicalToolName = canonicalizeCodexToolName(rawToolName);
@@ -604,6 +665,7 @@ function convertCodexFunctionCallPayload(
     },
     codexToolName: rawToolName,
     timestamp,
+    ...(isOrphaned && { orphanedToolUseIds: [payload.call_id] }),
   };
 
   return {
@@ -622,6 +684,7 @@ function convertCodexCustomToolCallPayload(
   payload: CodexCustomToolCallPayload,
   uuid: string,
   timestamp: string,
+  orphanedToolCallIds: Set<string> = new Set(),
 ): CodexToolUseConversion {
   const callId = payload.call_id ?? payload.id ?? `${uuid}-custom-tool`;
   const rawToolName = payload.name ?? "custom_tool_call";
@@ -653,6 +716,7 @@ function convertCodexCustomToolCallPayload(
     },
     codexToolName: rawToolName,
     timestamp,
+    ...(orphanedToolCallIds.has(callId) && { orphanedToolUseIds: [callId] }),
   };
 
   return {
@@ -671,6 +735,7 @@ function convertCodexWebSearchCallPayload(
   payload: CodexWebSearchCallPayload,
   uuid: string,
   timestamp: string,
+  orphanedToolCallIds: Set<string> = new Set(),
 ): Message {
   const callId = payload.call_id ?? payload.id ?? `${uuid}-web-search`;
   const rawToolName = payload.name ?? payload.type;
@@ -713,6 +778,7 @@ function convertCodexWebSearchCallPayload(
     },
     codexToolName: rawToolName,
     timestamp,
+    ...(orphanedToolCallIds.has(callId) && { orphanedToolUseIds: [callId] }),
   };
 }
 

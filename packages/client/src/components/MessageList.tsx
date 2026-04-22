@@ -329,15 +329,21 @@ export const MessageList = memo(function MessageList({
           </div>
         </div>
       ))}
+      {/* Compacting indicator - shown when context is being compressed */}
+      {isCompacting && (
+        <div className="system-message system-message-compacting">
+          <span className="system-message-icon spinning">⟳</span>
+          <span className="system-message-text">Compacting context...</span>
+        </div>
+      )}
+      <ProcessingIndicator isProcessing={isProcessing} />
       {/* Deferred messages - queued server-side, waiting for agent turn to end */}
       {deferredMessages.map((deferred, index) => (
         <div
           key={deferred.tempId ?? `deferred-${index}`}
           className="deferred-message"
         >
-          <div className="message-user-prompt deferred-message-bubble">
-            {deferred.content}
-          </div>
+          <div className="deferred-message-bubble">{deferred.content}</div>
           <div className="deferred-message-footer">
             <span className="deferred-message-status">
               {index === 0 ? "Queued (next)" : `Queued (#${index + 1})`}
@@ -355,14 +361,6 @@ export const MessageList = memo(function MessageList({
           </div>
         </div>
       ))}
-      {/* Compacting indicator - shown when context is being compressed */}
-      {isCompacting && (
-        <div className="system-message system-message-compacting">
-          <span className="system-message-icon spinning">⟳</span>
-          <span className="system-message-text">Compacting context...</span>
-        </div>
-      )}
-      <ProcessingIndicator isProcessing={isProcessing} />
     </div>
   );
 });

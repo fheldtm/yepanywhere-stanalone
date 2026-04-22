@@ -1,5 +1,6 @@
 import { memo, useState } from "react";
 import { useRemoteImage } from "../../hooks/useRemoteImage";
+import { useI18n } from "../../i18n";
 import {
   type UploadedFileInfo,
   getFilename,
@@ -280,6 +281,7 @@ function UploadedFilesMetadata({ files }: { files: UploadedFileInfo[] }) {
  * Renders text content with optional truncation and "Show more" button
  */
 function CollapsibleText({ text }: { text: string }) {
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = useState(false);
   const lines = text.split("\n");
   const exceedsLines = lines.length > MAX_LINES;
@@ -296,7 +298,7 @@ function CollapsibleText({ text }: { text: string }) {
             className="show-more-btn"
             onClick={() => setIsExpanded(false)}
           >
-            Show less
+            {t("showLess")}
           </button>
         )}
       </div>
@@ -322,7 +324,7 @@ function CollapsibleText({ text }: { text: string }) {
         className="show-more-btn"
         onClick={() => setIsExpanded(true)}
       >
-        Show more
+        {t("showMore")}
       </button>
     </div>
   );

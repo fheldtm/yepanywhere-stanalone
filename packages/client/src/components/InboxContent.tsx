@@ -5,6 +5,7 @@ import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useI18n } from "../i18n";
 import type { Project } from "../types";
 import { FilterDropdown, type FilterOption } from "./FilterDropdown";
+import { LoadingIndicator } from "./LoadingIndicator";
 import { SessionListItem } from "./SessionListItem";
 
 /**
@@ -218,6 +219,15 @@ export function InboxContent({
     onProjectChange?.(value === "" ? undefined : value);
   };
 
+  if (loading) {
+    return (
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label={t("inboxLoading")}
+      />
+    );
+  }
+
   return (
     <main className="page-scroll-container">
       <div className="page-content-inner inbox-content">
@@ -260,13 +270,11 @@ export function InboxContent({
           </button>
         </div>
 
-        {loading && <p className="loading">{t("inboxLoading")}</p>}
-
         {error && (
           <p className="error">{t("inboxError", { message: error.message })}</p>
         )}
 
-        {!loading && !error && isEmpty && (
+        {!error && isEmpty && (
           <div className="inbox-empty">
             <svg
               width="48"
@@ -291,7 +299,7 @@ export function InboxContent({
           </div>
         )}
 
-        {!loading && !error && !isEmpty && (
+        {!error && !isEmpty && (
           <div className="inbox-tiers">
             {TIER_CONFIGS.map((config) => (
               <InboxSection

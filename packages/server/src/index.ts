@@ -65,6 +65,7 @@ import {
   ServerSettingsService,
   SharingService,
 } from "./services/index.js";
+import { SessionDetailCache } from "./session-cache/index.js";
 import { ClaudeSessionReader } from "./sessions/reader.js";
 import { UploadManager } from "./uploads/manager.js";
 import {
@@ -333,6 +334,9 @@ const sessionIndexService = new SessionIndexService({
   writeLockStaleMs: config.sessionIndexWriteLockStaleMs,
   eventBus,
 });
+const sessionDetailCache = new SessionDetailCache({
+  dataDir: path.join(config.dataDir, "session-detail-cache"),
+});
 const pushService = new PushService({ dataDir: config.dataDir });
 const browserProfileService = new BrowserProfileService({
   dataDir: config.dataDir,
@@ -392,6 +396,7 @@ async function startServer() {
   await sessionMetadataService.initialize();
   await projectMetadataService.initialize();
   await sessionIndexService.initialize();
+  await sessionDetailCache.initialize();
   await pushService.initialize();
   await browserProfileService.initialize();
   await recentsService.initialize();
@@ -507,6 +512,7 @@ async function startServer() {
     sessionMetadataService,
     projectMetadataService,
     sessionIndexService,
+    sessionDetailCache,
     projectScanCacheTtlMs: config.projectScanCacheTtlMs,
     maxWorkers: config.maxWorkers,
     idlePreemptThresholdMs: config.idlePreemptThresholdMs,

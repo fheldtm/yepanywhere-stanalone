@@ -7,6 +7,7 @@
  */
 
 import { useNavigate } from "react-router-dom";
+import { LoadingIndicator } from "../components/LoadingIndicator";
 import { YepAnywhereLogo } from "../components/YepAnywhereLogo";
 import { useRemoteConnection } from "../contexts/RemoteConnectionContext";
 
@@ -17,17 +18,10 @@ export function RemoteLoginModePage() {
   // If auto-resume is in progress, show a loading screen
   if (isAutoResuming) {
     return (
-      <div className="login-page">
-        <div className="login-container">
-          <div className="login-logo">
-            <YepAnywhereLogo />
-          </div>
-          <p className="login-subtitle">Reconnecting...</p>
-          <div className="login-loading" data-testid="auto-resume-loading">
-            <div className="login-spinner" />
-          </div>
-        </div>
-      </div>
+      <LoadingIndicator
+        className="loading-indicator-page"
+        label="Reconnecting"
+      />
     );
   }
 
