@@ -2,6 +2,7 @@ import type { FileContentResponse } from "@yep-anywhere/shared";
 import { memo, useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useI18n } from "../i18n";
+import { compactShikiLineWhitespace } from "../lib/shikiHtml";
 
 interface FileViewerProps {
   projectId: string;
@@ -274,7 +275,9 @@ export const FileViewer = memo(function FileViewer({
               <div
                 className="shiki-container"
                 // biome-ignore lint/security/noDangerouslySetInnerHtml: server-rendered HTML
-                dangerouslySetInnerHTML={{ __html: fileData.highlightedHtml }}
+                dangerouslySetInnerHTML={{
+                  __html: compactShikiLineWhitespace(fileData.highlightedHtml),
+                }}
               />
               {fileData.highlightedTruncated && (
                 <div className="file-viewer-truncated">
