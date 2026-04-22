@@ -355,6 +355,10 @@ export class ClaudeSessionReader implements ISessionReader {
     };
   }
 
+  async getSessionFilePath(sessionId: string): Promise<string | null> {
+    return this.findSessionFile(sessionId);
+  }
+
   /**
    * Get agent session content for lazy-loading completed Tasks/Agents.
    *

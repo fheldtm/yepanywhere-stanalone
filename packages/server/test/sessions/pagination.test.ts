@@ -36,6 +36,25 @@ describe("sliceAtCompactBoundaries", () => {
     } satisfies PaginationInfo);
   });
 
+  it("caps large sessions that have no compactions", () => {
+    const messages = Array.from({ length: 500 }, (_, index) =>
+      msg(index % 2 === 0 ? "user" : "assistant", `m${index}`),
+    );
+
+    const result = sliceAtCompactBoundaries(messages, 2);
+
+    expect(result.messages.length).toBe(300);
+    expect(result.messages[0]?.uuid).toBe("m200");
+    expect(result.messages[299]?.uuid).toBe("m499");
+    expect(result.pagination).toEqual({
+      hasOlderMessages: true,
+      totalMessageCount: 500,
+      returnedMessageCount: 300,
+      truncatedBeforeMessageId: "m200",
+      totalCompactions: 0,
+    } satisfies PaginationInfo);
+  });
+
   it("returns all messages when fewer compactions than requested", () => {
     const messages = [
       msg("user", "u1"),
@@ -95,6 +114,25 @@ describe("sliceAtCompactBoundaries", () => {
       truncatedBeforeMessageId: "cb4",
       totalCompactions: 5,
     } satisfies PaginationInfo);
+  });
+
+  it("caps large chunks even when compact boundaries exist", () => {
+    const messages = [
+      msg("user", "u0"),
+      compactBoundary("cb1"),
+      ...Array.from({ length: 500 }, (_, index) =>
+        msg(index % 2 === 0 ? "user" : "assistant", `m${index}`),
+      ),
+    ];
+
+    const result = sliceAtCompactBoundaries(messages, 1);
+
+    expect(result.messages.length).toBe(300);
+    expect(result.messages[0]?.uuid).toBe("m200");
+    expect(result.messages[299]?.uuid).toBe("m499");
+    expect(result.pagination.hasOlderMessages).toBe(true);
+    expect(result.pagination.truncatedBeforeMessageId).toBe("m200");
+    expect(result.pagination.totalCompactions).toBe(1);
   });
 
   it("handles tailCompactions=1", () => {
@@ -260,6 +298,35 @@ describe("sliceAtCompactBoundaries", () => {
     // Together they cover all messages
     const allLoaded = [...second.messages, ...first.messages];
     expect(allLoaded.length).toBe(messages.length);
+  });
+
+  it("progressive loading: loads capped no-compaction sessions across multiple fetches", () => {
+    const messages = Array.from({ length: 650 }, (_, index) =>
+      msg(index % 2 === 0 ? "user" : "assistant", `m${index}`),
+    );
+
+    const first = sliceAtCompactBoundaries(messages, 2);
+    expect(first.messages.length).toBe(300);
+    expect(first.messages[0]?.uuid).toBe("m350");
+    expect(first.pagination.hasOlderMessages).toBe(true);
+
+    const second = sliceAtCompactBoundaries(
+      messages,
+      2,
+      first.pagination.truncatedBeforeMessageId,
+    );
+    expect(second.messages.length).toBe(300);
+    expect(second.messages[0]?.uuid).toBe("m50");
+    expect(second.pagination.hasOlderMessages).toBe(true);
+
+    const third = sliceAtCompactBoundaries(
+      messages,
+      2,
+      second.pagination.truncatedBeforeMessageId,
+    );
+    expect(third.messages.length).toBe(50);
+    expect(third.messages[0]?.uuid).toBe("m0");
+    expect(third.pagination.hasOlderMessages).toBe(false);
   });
 
   it("ignores system messages with other subtypes", () => {

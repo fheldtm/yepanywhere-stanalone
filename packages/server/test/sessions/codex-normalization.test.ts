@@ -923,6 +923,55 @@ describe("Codex Normalization", () => {
     });
   });
 
+  it("marks unfinished tool calls from previous Codex turns as aborted", () => {
+    const entries: CodexSessionEntry[] = [
+      {
+        type: "response_item",
+        timestamp: "2024-01-01T00:00:01Z",
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: "pnpm build" }),
+          call_id: "call-old",
+        },
+      },
+      {
+        type: "event_msg",
+        timestamp: "2024-01-01T00:10:00Z",
+        payload: {
+          type: "task_started",
+          turn_id: "turn-next",
+          started_at: 0,
+        },
+      },
+      {
+        type: "response_item",
+        timestamp: "2024-01-01T00:10:01Z",
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: "pnpm test" }),
+          call_id: "call-current",
+        },
+      },
+    ];
+
+    const session = normalizeSession(buildLoadedSession(entries));
+    expect(session.messages[0]?.orphanedToolUseIds).toEqual(["call-old"]);
+    expect(session.messages[1]?.orphanedToolUseIds).toBeUndefined();
+
+    const items = preprocessMessages(session.messages);
+    const oldCall = items.find(
+      (item) => item.type === "tool_call" && item.id === "call-old",
+    );
+    const currentCall = items.find(
+      (item) => item.type === "tool_call" && item.id === "call-current",
+    );
+
+    expect(oldCall).toMatchObject({ status: "aborted" });
+    expect(currentCall).toMatchObject({ status: "pending" });
+  });
+
   it("emits compacted entries as compact boundary system messages", () => {
     const entries: CodexSessionEntry[] = [
       {

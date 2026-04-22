@@ -8,6 +8,8 @@
 
 import type { Message } from "../supervisor/types.js";
 
+const DEFAULT_MAX_MESSAGES = 300;
+
 /** Pagination metadata returned alongside sliced messages */
 export interface PaginationInfo {
   /** Whether there are older messages not included in this response */
@@ -45,11 +47,14 @@ function isCompactBoundary(m: Message): boolean {
  * @param tailCompactions - Number of compact boundaries to include from the end
  * @param beforeMessageId - Optional cursor: only consider messages before this ID
  *                          (used for loading progressively older chunks)
+ * @param maxMessages - Maximum messages returned per chunk. This caps sessions
+ *                      that have no compact boundaries or very large tail chunks.
  */
 export function sliceAtCompactBoundaries(
   messages: Message[],
   tailCompactions: number,
   beforeMessageId?: string,
+  maxMessages = DEFAULT_MAX_MESSAGES,
 ): SliceResult {
   const totalMessageCount = messages.length;
 
@@ -73,9 +78,28 @@ export function sliceAtCompactBoundaries(
   }
 
   const totalCompactions = compactIndices.length;
+  const maxReturnMessages = Math.max(1, maxMessages);
 
   // If fewer or equal compactions than requested, return everything
   if (compactIndices.length <= tailCompactions) {
+    if (workingMessages.length > maxReturnMessages) {
+      const slicedMessages = workingMessages.slice(-maxReturnMessages);
+      const firstId = slicedMessages[0]
+        ? getMessageId(slicedMessages[0])
+        : undefined;
+
+      return {
+        messages: slicedMessages,
+        pagination: {
+          hasOlderMessages: true,
+          totalMessageCount,
+          returnedMessageCount: slicedMessages.length,
+          truncatedBeforeMessageId: firstId,
+          totalCompactions,
+        },
+      };
+    }
+
     return {
       messages: workingMessages,
       pagination: {
@@ -92,6 +116,24 @@ export function sliceAtCompactBoundaries(
   const sliceFromIdx =
     compactIndices[compactIndices.length - tailCompactions] ?? 0;
   const slicedMessages = workingMessages.slice(sliceFromIdx);
+  if (slicedMessages.length > maxReturnMessages) {
+    const cappedMessages = slicedMessages.slice(-maxReturnMessages);
+    const firstId = cappedMessages[0]
+      ? getMessageId(cappedMessages[0])
+      : undefined;
+
+    return {
+      messages: cappedMessages,
+      pagination: {
+        hasOlderMessages: true,
+        totalMessageCount,
+        returnedMessageCount: cappedMessages.length,
+        truncatedBeforeMessageId: firstId,
+        totalCompactions,
+      },
+    };
+  }
+
   const firstId = slicedMessages[0]
     ? getMessageId(slicedMessages[0])
     : undefined;

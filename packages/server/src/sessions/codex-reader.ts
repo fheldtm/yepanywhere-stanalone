@@ -79,6 +79,13 @@ export class CodexSessionReader implements ISessionReader {
   private sessionsDir: string;
   private projectPath?: string;
 
+  private static sharedSessionFileCache: Map<
+    string,
+    { sessions: CodexSessionFile[]; timestamp: number }
+  > = new Map();
+  private static inFlightScans: Map<string, Promise<CodexSessionFile[]>> =
+    new Map();
+
   // Cache of session ID -> file path for quick lookups
   private sessionFileCache: Map<string, CodexSessionFile> = new Map();
   private cacheTimestamp = 0;
@@ -94,6 +101,8 @@ export class CodexSessionReader implements ISessionReader {
   invalidateCache(): void {
     this.sessionFileCache.clear();
     this.cacheTimestamp = 0;
+    CodexSessionReader.sharedSessionFileCache.delete(this.sessionsDir);
+    CodexSessionReader.inFlightScans.delete(this.sessionsDir);
   }
 
   async listSessions(projectId: UrlProjectId): Promise<SessionSummary[]> {
@@ -286,7 +295,47 @@ export class CodexSessionReader implements ISessionReader {
    * Scan the sessions directory and find all session files.
    */
   private async scanSessions(): Promise<CodexSessionFile[]> {
-    // Check cache
+    const shared = CodexSessionReader.sharedSessionFileCache.get(
+      this.sessionsDir,
+    );
+    if (shared && Date.now() - shared.timestamp < this.CACHE_TTL_MS) {
+      this.populateSessionFileCache(shared.sessions);
+      return shared.sessions.filter((session) => !session.isSubagent);
+    }
+
+    const inFlight = CodexSessionReader.inFlightScans.get(this.sessionsDir);
+    if (inFlight) {
+      const sessions = await inFlight;
+      this.populateSessionFileCache(sessions);
+      return sessions.filter((session) => !session.isSubagent);
+    }
+
+    const promise = this.scanSessionsUncached();
+    CodexSessionReader.inFlightScans.set(this.sessionsDir, promise);
+    try {
+      const sessions = await promise;
+      CodexSessionReader.sharedSessionFileCache.set(this.sessionsDir, {
+        sessions,
+        timestamp: Date.now(),
+      });
+      this.populateSessionFileCache(sessions);
+      this.cacheTimestamp = Date.now();
+      return sessions.filter((session) => !session.isSubagent);
+    } finally {
+      if (CodexSessionReader.inFlightScans.get(this.sessionsDir) === promise) {
+        CodexSessionReader.inFlightScans.delete(this.sessionsDir);
+      }
+    }
+  }
+
+  private populateSessionFileCache(sessions: CodexSessionFile[]): void {
+    for (const session of sessions) {
+      this.sessionFileCache.set(session.id, session);
+    }
+    this.cacheTimestamp = Date.now();
+  }
+
+  private async scanSessionsUncached(): Promise<CodexSessionFile[]> {
     if (Date.now() - this.cacheTimestamp < this.CACHE_TTL_MS) {
       return Array.from(this.sessionFileCache.values());
     }
@@ -303,7 +352,7 @@ export class CodexSessionReader implements ISessionReader {
     }
 
     this.cacheTimestamp = Date.now();
-    return sessions.filter((session) => !session.isSubagent);
+    return sessions;
   }
 
   async getSessionFilePath(sessionId: string): Promise<string | null> {
