@@ -76,6 +76,7 @@ export const SERVER_SCOPED_KEYS = {
   browserProfileId: "browser-profile-id",
   notifyInApp: "notify-in-app",
   recentProject: "recent-project",
+  sessionTabs: "session-tabs",
 } as const;
 
 /** Build a server-scoped storage key */
@@ -208,6 +209,7 @@ export const LEGACY_KEYS = {
   browserProfileId: "yep-anywhere-device-id",
   notifyInApp: "yep-anywhere-notify-in-app",
   recentProject: "yep-anywhere-recent-project",
+  sessionTabs: "yep-anywhere-session-tabs",
   // Draft keys had different prefixes
   draftMessagePrefix: "draft-message-",
   newSessionDraftPrefix: "draft-new-session-",
@@ -244,6 +246,7 @@ export function migrateLegacySettings(installId: string): boolean {
     { legacy: LEGACY_KEYS.browserProfileId, scoped: "browserProfileId" },
     { legacy: LEGACY_KEYS.notifyInApp, scoped: "notifyInApp" },
     { legacy: LEGACY_KEYS.recentProject, scoped: "recentProject" },
+    { legacy: LEGACY_KEYS.sessionTabs, scoped: "sessionTabs" },
   ];
 
   for (const { legacy, scoped } of scopedMigrations) {
