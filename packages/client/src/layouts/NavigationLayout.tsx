@@ -108,8 +108,9 @@ export function NavigationLayout() {
         />
       )}
 
-      {/* Child route content */}
-      <Outlet context={context} />
+      <div className="main-content-with-tabs">
+        <Outlet context={context} />
+      </div>
     </div>
   );
 }
