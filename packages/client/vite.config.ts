@@ -28,10 +28,18 @@ function getGitVersion(): string {
   }
 }
 
+function getBuildId(): string {
+  return new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, "")
+    .slice(0, 12);
+}
+
 export default defineConfig({
   clearScreen: false,
   define: {
     __APP_VERSION__: JSON.stringify(getGitVersion()),
+    __APP_BUILD_ID__: JSON.stringify(getBuildId()),
   },
   plugins: [
     react(),

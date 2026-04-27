@@ -24,6 +24,13 @@ function getGitVersion(): string {
   }
 }
 
+function getBuildId(): string {
+  return new Date()
+    .toISOString()
+    .replace(/[-:TZ.]/g, "")
+    .slice(0, 12);
+}
+
 // Port for dev server (different from regular client to allow parallel dev)
 const remoteDevPort = process.env.REMOTE_PORT
   ? Number.parseInt(process.env.REMOTE_PORT, 10)
@@ -72,6 +79,7 @@ export default defineConfig({
   define: {
     "import.meta.env.VITE_IS_REMOTE_CLIENT": JSON.stringify(true),
     __APP_VERSION__: JSON.stringify(getGitVersion()),
+    __APP_BUILD_ID__: JSON.stringify(getBuildId()),
   },
   // Build configuration for static site
   build: {
