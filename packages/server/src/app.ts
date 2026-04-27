@@ -184,6 +184,8 @@ export interface AppOptions {
   enabledProviders?: string[];
   /** Whether voice input is enabled. Default: true */
   voiceInputEnabled?: boolean;
+  /** Whether browser-based terminal access is enabled. Default: false */
+  terminalEnabled?: boolean;
   /** Allowed directory prefixes for serving local images. Default: ["/tmp"] */
   allowedImagePaths?: string[];
 }
@@ -451,6 +453,7 @@ export function createApp(options: AppOptions): AppResult {
         false,
       installId: options.installId,
       voiceInputEnabled: options.voiceInputEnabled,
+      terminalEnabled: options.terminalEnabled,
     }),
   );
 
