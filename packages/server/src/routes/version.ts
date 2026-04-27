@@ -161,6 +161,8 @@ export interface VersionRouteOptions {
   installId?: string;
   /** Whether voice input is enabled (default: true). */
   voiceInputEnabled?: boolean;
+  /** Whether browser-based terminal access is enabled. */
+  terminalEnabled?: boolean;
 }
 
 export interface ServerCompatibilityInfo {
@@ -200,6 +202,9 @@ export function getServerCapabilities(options?: VersionRouteOptions): string[] {
   if (options?.voiceInputEnabled !== false) {
     capabilities.push("voiceInput");
   }
+  if (options?.terminalEnabled === true) {
+    capabilities.push("terminal");
+  }
   const deviceBridgeState = options?.getDeviceBridgeState?.() ?? "unavailable";
   const enabled = options?.isDeviceBridgeEnabled?.() ?? false;
   capabilities.push(
@@ -232,6 +237,7 @@ export function createVersionRoutes(options?: VersionRouteOptions): Hono {
     const capabilities = [
       ...BASE_CAPABILITIES,
       ...(options?.voiceInputEnabled !== false ? ["voiceInput"] : []),
+      ...(options?.terminalEnabled === true ? ["terminal"] : []),
       ...getCapabilitiesForDeviceBridgeState(deviceBridgeStatus.state, enabled),
     ];
 
