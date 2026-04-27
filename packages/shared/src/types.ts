@@ -70,6 +70,23 @@ export interface SlashCommand {
   argumentHint?: string;
 }
 
+export interface PromptTool {
+  /** Stable ID, e.g. "claude:/commit" or "codex:$frontend-design" */
+  id: string;
+  /** Prefix inserted into the composer */
+  trigger: "/" | "$";
+  /** Command name without trigger */
+  name: string;
+  /** Description of what the tool does */
+  description?: string;
+  /** Hint for command arguments, e.g. "<file>" */
+  argumentHint?: string;
+  /** Provider this prompt tool belongs to */
+  provider: ProviderName;
+  /** Where the tool was discovered from */
+  source: "sdk" | "skill" | "builtin" | "connector";
+}
+
 /**
  * Provider info for UI display.
  */

@@ -1,4 +1,4 @@
-import type { UploadedFile } from "@yep-anywhere/shared";
+import type { PromptTool, UploadedFile } from "@yep-anywhere/shared";
 import {
   Clock,
   ListPlus,
@@ -40,8 +40,8 @@ export interface MessageInputToolbarProps {
   voiceDisabled?: boolean;
 
   // Slash commands
-  slashCommands?: string[];
-  onSelectSlashCommand?: (command: string) => void;
+  promptTools?: PromptTool[];
+  onSelectPromptTool?: (tool: PromptTool) => void;
 
   // Context usage
   contextUsage?: ContextUsage;
@@ -79,8 +79,8 @@ export function MessageInputToolbar({
   onInterimTranscript,
   onListeningStart,
   voiceDisabled,
-  slashCommands = [],
-  onSelectSlashCommand,
+  promptTools = [],
+  onSelectPromptTool,
   contextUsage,
   isRunning,
   isThinking,
@@ -151,10 +151,10 @@ export function MessageInputToolbar({
             disabled={voiceDisabled}
           />
         )}
-        {onSelectSlashCommand && (
+        {onSelectPromptTool && (
           <PromptToolsButton
-            commands={slashCommands}
-            onSelectCommand={onSelectSlashCommand}
+            tools={promptTools}
+            onSelectTool={onSelectPromptTool}
             disabled={voiceDisabled}
           />
         )}

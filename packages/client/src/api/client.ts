@@ -8,6 +8,7 @@ import type {
   GitStatusInfo,
   NewSessionDefaults,
   PendingInputType,
+  PromptTool,
   ProviderInfo,
   ProviderName,
   SlashCommand,
@@ -456,6 +457,16 @@ export const api = {
       pendingInputRequest?: InputRequest | null;
       slashCommands?: SlashCommand[] | null;
     }>(`/projects/${projectId}/sessions/${sessionId}/metadata`),
+
+  getPromptTools: (params: { provider?: string; processId?: string }) => {
+    const search = new URLSearchParams();
+    if (params.provider) search.set("provider", params.provider);
+    if (params.processId) search.set("processId", params.processId);
+    const qs = search.toString();
+    return fetchJSON<{ tools: PromptTool[] }>(
+      `/prompt-tools${qs ? `?${qs}` : ""}`,
+    );
+  },
 
   /**
    * Get agent session content for lazy-loading completed Tasks.
