@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { SessionIndexService } from "../indexes/index.js";
 import type { SessionMetadataService } from "../metadata/SessionMetadataService.js";
 import type { ProjectScanner } from "../projects/scanner.js";
+import type { CodexProvider } from "../sdk/providers/codex.js";
 import type { ISessionReader } from "../sessions/types.js";
 import type { Supervisor } from "../supervisor/Supervisor.js";
 import type { ProcessInfo, Project } from "../supervisor/types.js";
@@ -20,6 +21,7 @@ export interface ProcessesDeps {
   ) => { reader: ISessionReader; sessionDir: string };
   sessionIndexService?: SessionIndexService;
   sessionMetadataService?: SessionMetadataService;
+  codexProvider?: CodexProvider;
 }
 
 /**
@@ -178,6 +180,13 @@ export function createProcessesRoutes(deps: ProcessesDeps): Hono {
 
     const models = await process.supportedModels();
     if (models === null) {
+      if (
+        deps.codexProvider &&
+        (process.provider === "codex" || process.provider === "codex-oss")
+      ) {
+        const fallbackModels = await deps.codexProvider.getAvailableModels();
+        return c.json({ models: fallbackModels });
+      }
       // Process doesn't support dynamic model listing
       return c.json(
         { error: "Dynamic model listing not supported for this process" },
