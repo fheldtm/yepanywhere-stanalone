@@ -1,8 +1,14 @@
 import { memo, useMemo, useState } from "react";
+import { useOptionalSessionMetadata } from "../../contexts/SessionMetadataContext";
 import {
   getDisplayBashCommandFromInput,
   isCodexLikeBashInput,
 } from "../../lib/bashCommand";
+import {
+  createSessionKey,
+  useOptionalSessionEntry,
+  useOptionalSessionStore,
+} from "../../session-store";
 import type { ToolResultData } from "../../types/renderItems";
 import { toolRegistry } from "../renderers/tools";
 import type { RenderContext } from "../renderers/types";
@@ -106,9 +112,22 @@ export const ToolCallRow = memo(function ToolCallRow({
   const isNonExpandable = hasInteractiveSummary || hasCollapsedPreview;
 
   // Edit and TodoWrite tools are expanded by default
-  const [expanded, setExpanded] = useState(
-    !isNonExpandable && (toolName === "Edit" || toolName === "TodoWrite"),
-  );
+  const defaultExpanded =
+    !isNonExpandable && (toolName === "Edit" || toolName === "TodoWrite");
+  const sessionMetadata = useOptionalSessionMetadata();
+  const sessionKey = sessionMetadata
+    ? createSessionKey(sessionMetadata.projectId, sessionMetadata.sessionId)
+    : null;
+  const store = useOptionalSessionStore();
+  const entry = useOptionalSessionEntry(sessionKey);
+  const [localExpanded, setLocalExpanded] = useState(defaultExpanded);
+  const storedExpanded =
+    entry?.ui.expandedToolIds.has(id) === true
+      ? true
+      : entry?.ui.collapsedToolIds.has(id) === true
+        ? false
+        : undefined;
+  const expanded = storedExpanded ?? localExpanded;
 
   const summary = useMemo(() => {
     return getToolSummary(toolName, toolInput, toolResult, status);
@@ -116,7 +135,12 @@ export const ToolCallRow = memo(function ToolCallRow({
 
   const handleToggle = () => {
     if (!isNonExpandable) {
-      setExpanded(!expanded);
+      const next = !expanded;
+      if (store && sessionKey) {
+        store.setToolExpanded(sessionKey, id, next);
+      } else {
+        setLocalExpanded(next);
+      }
     }
   };
 
