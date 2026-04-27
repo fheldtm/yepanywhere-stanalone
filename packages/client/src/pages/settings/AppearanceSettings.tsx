@@ -10,6 +10,7 @@ import { FONT_SIZES, useFontSize } from "../../hooks/useFontSize";
 import { useFunPhrases } from "../../hooks/useFunPhrases";
 import { useStreamingEnabled } from "../../hooks/useStreamingEnabled";
 import { TAB_SIZES, useTabSize } from "../../hooks/useTabSize";
+import { useTerminalTheme } from "../../hooks/useTerminalTheme";
 import { THEMES, useTheme } from "../../hooks/useTheme";
 import { SUPPORTED_LOCALES, useI18n } from "../../i18n";
 import {
@@ -18,6 +19,10 @@ import {
   getTabSizeLabel,
   getThemeLabel,
 } from "../../i18n-settings";
+import {
+  TERMINAL_THEME_PRESETS,
+  type TerminalThemeId,
+} from "../../lib/terminalThemes";
 
 interface FontFamilySettingProps {
   target: FontFamilyTarget;
@@ -71,6 +76,7 @@ export function AppearanceSettings() {
   const { fontFamilies, setFontFamily } = useFontFamily();
   const { fontSize, setFontSize } = useFontSize();
   const { tabSize, setTabSize } = useTabSize();
+  const { terminalTheme, setTerminalTheme } = useTerminalTheme();
   const {
     theme,
     setTheme,
@@ -205,6 +211,28 @@ export function AppearanceSettings() {
           value={fontFamilies.code}
           setFontFamily={setFontFamily}
         />
+        <div className="settings-item">
+          <div className="settings-item-info">
+            <strong>{t("appearanceTerminalThemeTitle")}</strong>
+            <p>{t("appearanceTerminalThemeDescription")}</p>
+          </div>
+          <FilterDropdown
+            label={t("appearanceTerminalThemeTitle")}
+            multiSelect={false}
+            align="right"
+            options={TERMINAL_THEME_PRESETS.map((preset) => ({
+              value: preset.id,
+              label: preset.label,
+            }))}
+            selected={[terminalTheme]}
+            onChange={(values) => {
+              const nextTheme = values[0];
+              if (nextTheme) {
+                setTerminalTheme(nextTheme as TerminalThemeId);
+              }
+            }}
+          />
+        </div>
         <div className="settings-item">
           <div className="settings-item-info">
             <strong>{t("appearanceTabSizeTitle")}</strong>
