@@ -15,6 +15,7 @@ import { useReloadNotifications } from "./hooks/useReloadNotifications";
 import { useServiceWorkerRegistration } from "./hooks/useServiceWorkerRegistration";
 import { I18nProvider } from "./i18n";
 import { initClientLogCollection } from "./lib/diagnostics";
+import { SessionStoreProvider } from "./session-store";
 
 interface Props {
   children: ReactNode;
@@ -87,7 +88,9 @@ export function App({ children }: Props) {
         <AuthProvider>
           <InboxProvider>
             <SchemaValidationProvider>
-              <AppContent>{children}</AppContent>
+              <SessionStoreProvider>
+                <AppContent>{children}</AppContent>
+              </SessionStoreProvider>
               {!isLoading && showWizard && (
                 <OnboardingWizard onComplete={completeOnboarding} />
               )}

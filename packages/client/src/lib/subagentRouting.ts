@@ -1,4 +1,4 @@
-import type { AgentContent, AgentContentMap } from "../hooks/useSession";
+import type { AgentContent, AgentContentMap } from "../session-store";
 import type { Message } from "../types";
 import { getMessageId } from "./mergeMessages";
 

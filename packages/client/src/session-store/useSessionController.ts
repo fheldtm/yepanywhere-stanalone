@@ -5,6 +5,24 @@ import {
 } from "@yep-anywhere/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
+import {
+  type FileChangeEvent,
+  type ProcessStateEvent,
+  type SessionStatusEvent,
+  type SessionUpdatedEvent,
+  useFileActivity,
+} from "../hooks/useFileActivity";
+import {
+  type AgentContentMap,
+  type SessionLoadResult,
+  useSessionMessages,
+} from "../hooks/useSessionMessages";
+import { useSessionStream } from "../hooks/useSessionStream";
+import { useSessionWatchStream } from "../hooks/useSessionWatchStream";
+import {
+  type StreamingMarkdownCallbacks,
+  useStreamingContent,
+} from "../hooks/useStreamingContent";
 import { getMessageId } from "../lib/mergeMessages";
 import { findPendingTasks } from "../lib/pendingTasks";
 import { extractSessionIdFromFileEvent } from "../lib/sessionFile";
@@ -14,34 +32,20 @@ import type {
   PermissionMode,
   SessionStatus,
 } from "../types";
-import {
-  type FileChangeEvent,
-  type ProcessStateEvent,
-  type SessionStatusEvent,
-  type SessionUpdatedEvent,
-  useFileActivity,
-} from "./useFileActivity";
-import {
-  type AgentContentMap,
-  type SessionLoadResult,
-  useSessionMessages,
-} from "./useSessionMessages";
-import { useSessionStream } from "./useSessionStream";
-import { useSessionWatchStream } from "./useSessionWatchStream";
-import {
-  type StreamingMarkdownCallbacks,
-  useStreamingContent,
-} from "./useStreamingContent";
+import type { SessionEntry } from "./types";
 
 export type ProcessState = "idle" | "in-turn" | "waiting-input" | "hold";
 
 // Re-export types from useSessionMessages
-export type { AgentContent, AgentContentMap } from "./useSessionMessages";
+export type {
+  AgentContent,
+  AgentContentMap,
+} from "../hooks/useSessionMessages";
 
 const THROTTLE_MS = 500;
 
 // Re-export StreamingMarkdownCallbacks for consumers
-export type { StreamingMarkdownCallbacks } from "./useStreamingContent";
+export type { StreamingMarkdownCallbacks } from "../hooks/useStreamingContent";
 
 /** Pending message waiting for server confirmation */
 export interface PendingMessage {
@@ -88,11 +92,12 @@ function extractUserMessageText(
   return null;
 }
 
-export function useSession(
+export function useSessionController(
   projectId: string,
   sessionId: string,
   initialStatus?: { owner: "self"; processId: string },
   streamingMarkdownCallbacks?: StreamingMarkdownCallbacks,
+  initialEntry?: SessionEntry,
 ) {
   // Use initial status if provided (from navigation state) to connect stream immediately
   const [status, setStatus] = useState<SessionStatus>(
@@ -243,6 +248,7 @@ export function useSession(
   } = useSessionMessages({
     projectId,
     sessionId,
+    initialEntry,
     onLoadComplete: handleLoadComplete,
     onLoadError: handleLoadError,
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentContentMap } from "../../hooks/useSession";
+import type { AgentContentMap } from "../../session-store";
 import type { Message } from "../../types";
 import {
   addMessageToAgentContent,

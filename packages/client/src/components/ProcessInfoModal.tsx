@@ -6,8 +6,8 @@ import type {
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useActivityBusState } from "../hooks/useActivityBusState";
-import type { ProcessState } from "../hooks/useSession";
 import { useI18n } from "../i18n";
+import type { ProcessState } from "../session-store";
 import type { SessionStatus } from "../types";
 import { Modal } from "./ui/Modal";
 
