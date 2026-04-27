@@ -6,6 +6,10 @@ interface UseVersionOptions {
   freshOnMount?: boolean;
 }
 
+let cachedVersion: VersionInfo | null = null;
+let cachedError: Error | null = null;
+let inFlightVersionRequest: Promise<VersionInfo> | null = null;
+
 /**
  * Hook to fetch and cache server version info.
  *
@@ -16,20 +20,41 @@ interface UseVersionOptions {
  * - refetch: Function to manually refresh version info
  */
 export function useVersion(options?: UseVersionOptions) {
-  const [version, setVersion] = useState<VersionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [version, setVersion] = useState<VersionInfo | null>(cachedVersion);
+  const [loading, setLoading] = useState(!cachedVersion && !cachedError);
+  const [error, setError] = useState<Error | null>(cachedError);
   const hasFetchedRef = useRef(false);
 
   const fetchVersion = useCallback(async (fresh = false) => {
+    if (!fresh && cachedVersion) {
+      setVersion(cachedVersion);
+      setError(cachedError);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getVersion({ fresh });
+      const request =
+        fresh || !inFlightVersionRequest
+          ? api.getVersion({ fresh })
+          : inFlightVersionRequest;
+      if (!fresh) {
+        inFlightVersionRequest = request;
+      }
+      const data = await request;
+      cachedVersion = data;
+      cachedError = null;
       setVersion(data);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const error = err instanceof Error ? err : new Error(String(err));
+      cachedError = error;
+      setError(error);
     } finally {
+      if (!fresh) {
+        inFlightVersionRequest = null;
+      }
       setLoading(false);
     }
   }, []);
