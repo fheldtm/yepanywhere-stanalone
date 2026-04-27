@@ -1,3 +1,5 @@
+import { Bot, ChevronDown, ChevronRight, Rows3, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { GlobalSessionItem } from "../api/client";
@@ -10,8 +12,14 @@ import { useRecentProjects } from "../hooks/useRecentProjects";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
 import { useVersion } from "../hooks/useVersion";
 import { useI18n } from "../i18n";
+import { isRemoteClient } from "../lib/connection";
+import { UI_KEYS } from "../lib/storageKeys";
+import {
+  buildSessionRoute,
+  useSessionTabActions,
+  useSessionTabs,
+} from "../session-store";
 import { getSessionDisplayTitle, toUrlProjectId } from "../utils";
-import { AgentsNavItem } from "./AgentsNavItem";
 import { SessionListItem } from "./SessionListItem";
 import {
   SidebarIcons,
@@ -24,6 +32,14 @@ const SWIPE_THRESHOLD = 50; // Minimum distance to trigger close
 const SWIPE_ENGAGE_THRESHOLD = 15; // Minimum horizontal distance before swipe engages
 const RECENT_SESSIONS_INITIAL = 12; // Initial number of recent sessions to show
 const RECENT_SESSIONS_INCREMENT = 10; // How many more to show on each expand
+
+function loadSidebarSectionOpen(key: string): boolean {
+  return localStorage.getItem(key) !== "false";
+}
+
+function saveSidebarSectionOpen(key: string, open: boolean): void {
+  localStorage.setItem(key, String(open));
+}
 
 interface SidebarProps {
   isOpen: boolean;
@@ -47,6 +63,89 @@ interface SidebarProps {
   onResize?: (width: number) => void;
   /** Desktop mode: called when resize ends */
   onResizeEnd?: () => void;
+}
+
+interface SidebarGroupProps {
+  children: ReactNode;
+}
+
+function SidebarGroupPanel({ children }: SidebarGroupProps) {
+  return <div className="sidebar-group-panel">{children}</div>;
+}
+
+function SidebarGroupList({ children }: SidebarGroupProps) {
+  return <ul className="sidebar-group-list">{children}</ul>;
+}
+
+interface SidebarGroupItemProps {
+  to: string;
+  title: string;
+  meta?: string;
+  active?: boolean;
+  unread?: boolean;
+  draft?: boolean;
+  state?: string;
+  activity?: GlobalSessionItem["activity"];
+  pendingInputType?: GlobalSessionItem["pendingInputType"];
+  onClick?: () => void;
+  endSlot?: ReactNode;
+}
+
+function SidebarGroupItem({
+  to,
+  title,
+  meta,
+  active,
+  unread,
+  draft,
+  state,
+  activity,
+  pendingInputType,
+  onClick,
+  endSlot,
+}: SidebarGroupItemProps) {
+  const activitySlot =
+    endSlot ??
+    (state ? (
+      <span className={`sidebar-group-state state-${state}`}>{state}</span>
+    ) : pendingInputType ? (
+      <span className="session-badge session-badge-needs-input">
+        {pendingInputType === "tool-approval" ? "Appr" : "Q"}
+      </span>
+    ) : activity === "in-turn" ? (
+      <span
+        className="thinking-indicator-dot sidebar-group-activity"
+        aria-hidden="true"
+      />
+    ) : null);
+
+  return (
+    <li
+      className={[
+        "sidebar-group-list-item",
+        active && "active",
+        unread && "unread",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Link
+        to={to}
+        className="sidebar-group-item"
+        onClick={onClick}
+        title={title}
+      >
+        <span className="sidebar-group-item-main">
+          <span className="sidebar-group-item-title">
+            {title}
+            {draft && <span className="session-draft-badge">Draft</span>}
+          </span>
+          {meta && <span className="sidebar-group-item-meta">{meta}</span>}
+        </span>
+        {activitySlot}
+      </Link>
+    </li>
+  );
 }
 
 export function Sidebar({
@@ -86,13 +185,20 @@ export function Sidebar({
   // Server capabilities for feature gating
   const { version: versionInfo } = useVersion();
   const capabilities = versionInfo?.capabilities ?? [];
+  const showTerminalNavItem = !isRemoteClient();
 
   // Global inbox count
   const inboxCount = useNeedsAttentionBadge();
+  const { tabs, activeKey } = useSessionTabs();
+  const tabActions = useSessionTabActions();
   const { recentProjects, projects } = useRecentProjects();
   const newSessionProjectId = resolvePreferredProjectId(
     projects,
     recentProjects[0]?.id,
+  );
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
   );
 
   const sidebarRef = useRef<HTMLElement>(null);
@@ -112,6 +218,28 @@ export function Sidebar({
   const [starredSessionsLimit, setStarredSessionsLimit] = useState(
     RECENT_SESSIONS_INITIAL,
   );
+  const [tabsOpen, setTabsOpen] = useState(() =>
+    loadSidebarSectionOpen(UI_KEYS.sidebarTabsOpen),
+  );
+  const [tasksOpen, setTasksOpen] = useState(() =>
+    loadSidebarSectionOpen(UI_KEYS.sidebarTasksOpen),
+  );
+
+  const toggleTabsOpen = () => {
+    setTabsOpen((open) => {
+      const next = !open;
+      saveSidebarSectionOpen(UI_KEYS.sidebarTabsOpen, next);
+      return next;
+    });
+  };
+
+  const toggleTasksOpen = () => {
+    setTasksOpen((open) => {
+      const next = !open;
+      saveSidebarSectionOpen(UI_KEYS.sidebarTasksOpen, next);
+      return next;
+    });
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0]?.clientX ?? null;
@@ -241,6 +369,17 @@ export function Sidebar({
 
   // Track which sessions have unsent drafts in localStorage
   const drafts = useDrafts();
+  const navigateAfterTabClose = (closedKey: string) => {
+    const closedIndex = tabs.findIndex((tab) => tab.key === closedKey);
+    const next =
+      tabs[closedIndex - 1] ??
+      tabs.find((candidate) => candidate.key !== closedKey);
+    navigate(
+      next
+        ? buildSessionRoute(next.projectId, next.sessionId, basePath)
+        : `${basePath}/sessions`,
+    );
+  };
 
   // In desktop mode, always render. In mobile mode, only render when open.
   if (!isDesktop && !isOpen) return null;
@@ -361,24 +500,17 @@ export function Sidebar({
               basePath={basePath}
             />
             <SidebarNavItem
-              to="/sessions"
-              icon={SidebarIcons.allSessions}
-              label={t("sidebarAllSessions")}
-              onClick={onNavigate}
-              basePath={basePath}
-            />
-            <SidebarNavItem
               to="/projects"
               icon={SidebarIcons.projects}
               label={t("sidebarProjects")}
               onClick={onNavigate}
               basePath={basePath}
             />
-            {capabilities.includes("git-status") && (
+            {showTerminalNavItem && (
               <SidebarNavItem
-                to="/git-status"
-                icon={SidebarIcons.sourceControl}
-                label={t("sidebarSourceControl")}
+                to="/terminal"
+                icon={SidebarIcons.terminal}
+                label={t("sidebarTerminal")}
                 onClick={onNavigate}
                 basePath={basePath}
               />
@@ -393,7 +525,6 @@ export function Sidebar({
                 basePath={basePath}
               />
             )}
-            <AgentsNavItem onClick={onNavigate} basePath={basePath} />
             <SidebarNavItem
               to="/settings"
               icon={SidebarIcons.settings}
@@ -430,6 +561,227 @@ export function Sidebar({
                   {t("sidebarSwitchHost")}
                 </span>
               </button>
+            )}
+
+            {!isCollapsed && (
+              <>
+                <div className="sidebar-section sidebar-workspace-section">
+                  <button
+                    type="button"
+                    className="sidebar-section-toggle"
+                    onClick={toggleTabsOpen}
+                    aria-expanded={tabsOpen}
+                  >
+                    <span className="sidebar-section-toggle-label">
+                      <span className="sidebar-nav-icon">
+                        <Rows3 size={16} aria-hidden="true" />
+                      </span>
+                      <span className="sidebar-nav-text">
+                        {t("sidebarSectionTabs")}
+                      </span>
+                    </span>
+                    {tabsOpen ? (
+                      <ChevronDown size={16} aria-hidden="true" />
+                    ) : (
+                      <ChevronRight size={16} aria-hidden="true" />
+                    )}
+                  </button>
+                  {tabsOpen && (
+                    <SidebarGroupPanel>
+                      {tabs.length > 0 ? (
+                        <SidebarGroupList>
+                          {tabs.map((tab) => {
+                            const active = tab.key === activeKey;
+                            const href = buildSessionRoute(
+                              tab.projectId,
+                              tab.sessionId,
+                              basePath,
+                            );
+                            return (
+                              <SidebarGroupItem
+                                key={tab.key}
+                                to={href}
+                                title={tab.title?.trim() || "Untitled"}
+                                meta={
+                                  projectNameById.get(tab.projectId) ??
+                                  tab.projectId
+                                }
+                                active={active}
+                                onClick={() => {
+                                  tabActions.activateTab(tab.key);
+                                  onNavigate();
+                                }}
+                                endSlot={
+                                  <span className="sidebar-group-end">
+                                    {tab.activity === "in-turn" && (
+                                      <span
+                                        className="thinking-indicator-dot sidebar-group-activity"
+                                        aria-hidden="true"
+                                      />
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="sidebar-group-close"
+                                      aria-label="Close tab"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        if (
+                                          tab.sessionId === currentSessionId
+                                        ) {
+                                          navigateAfterTabClose(tab.key);
+                                        }
+                                        tabActions.closeTab(tab.key);
+                                        onNavigate();
+                                      }}
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  </span>
+                                }
+                              />
+                            );
+                          })}
+                        </SidebarGroupList>
+                      ) : (
+                        <p className="sidebar-empty sidebar-group-empty">
+                          {t("sidebarNoOpenTabs")}
+                        </p>
+                      )}
+                    </SidebarGroupPanel>
+                  )}
+                </div>
+
+                <div className="sidebar-section sidebar-workspace-section">
+                  <button
+                    type="button"
+                    className="sidebar-section-toggle"
+                    onClick={toggleTasksOpen}
+                    aria-expanded={tasksOpen}
+                  >
+                    <span className="sidebar-section-toggle-label">
+                      <span className="sidebar-nav-icon">
+                        <Bot size={16} aria-hidden="true" />
+                      </span>
+                      <span className="sidebar-nav-text">
+                        {t("sidebarSectionTasks")}
+                      </span>
+                    </span>
+                    {tasksOpen ? (
+                      <ChevronDown size={16} aria-hidden="true" />
+                    ) : (
+                      <ChevronRight size={16} aria-hidden="true" />
+                    )}
+                  </button>
+                  {tasksOpen && (
+                    <SidebarGroupPanel>
+                      {recentDaySessions.length > 0 && (
+                        <div className="sidebar-section sidebar-subsection">
+                          <h3 className="sidebar-section-title">
+                            {t("sidebarSectionLast24Hours")}
+                          </h3>
+                          <SidebarGroupList>
+                            {recentDaySessions
+                              .slice(0, recentSessionsLimit)
+                              .map((session) => (
+                                <SidebarGroupItem
+                                  key={session.id}
+                                  to={buildSessionRoute(
+                                    session.projectId,
+                                    session.id,
+                                    basePath,
+                                  )}
+                                  title={getSessionDisplayTitle(session)}
+                                  meta={session.projectName}
+                                  pendingInputType={session.pendingInputType}
+                                  unread={session.hasUnread}
+                                  active={session.id === currentSessionId}
+                                  activity={session.activity}
+                                  onClick={onNavigate}
+                                  draft={drafts.has(session.id)}
+                                />
+                              ))}
+                          </SidebarGroupList>
+                          {recentDaySessions.length > recentSessionsLimit && (
+                            <button
+                              type="button"
+                              className="sidebar-show-more"
+                              onClick={() =>
+                                setRecentSessionsLimit(
+                                  (prev) => prev + RECENT_SESSIONS_INCREMENT,
+                                )
+                              }
+                            >
+                              {t("actionShowMore", {
+                                count: Math.min(
+                                  RECENT_SESSIONS_INCREMENT,
+                                  recentDaySessions.length -
+                                    recentSessionsLimit,
+                                ),
+                              })}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {olderSessions.length > 0 && (
+                        <div className="sidebar-section sidebar-subsection">
+                          <h3 className="sidebar-section-title">
+                            {t("sidebarSectionOlder")}
+                          </h3>
+                          <SidebarGroupList>
+                            {olderSessions
+                              .slice(0, olderSessionsLimit)
+                              .map((session) => (
+                                <SidebarGroupItem
+                                  key={session.id}
+                                  to={buildSessionRoute(
+                                    session.projectId,
+                                    session.id,
+                                    basePath,
+                                  )}
+                                  title={getSessionDisplayTitle(session)}
+                                  meta={session.projectName}
+                                  pendingInputType={session.pendingInputType}
+                                  unread={session.hasUnread}
+                                  active={session.id === currentSessionId}
+                                  activity={session.activity}
+                                  onClick={onNavigate}
+                                  draft={drafts.has(session.id)}
+                                />
+                              ))}
+                          </SidebarGroupList>
+                          {olderSessions.length > olderSessionsLimit && (
+                            <button
+                              type="button"
+                              className="sidebar-show-more"
+                              onClick={() =>
+                                setOlderSessionsLimit(
+                                  (prev) => prev + RECENT_SESSIONS_INCREMENT,
+                                )
+                              }
+                            >
+                              {t("actionShowMore", {
+                                count: Math.min(
+                                  RECENT_SESSIONS_INCREMENT,
+                                  olderSessions.length - olderSessionsLimit,
+                                ),
+                              })}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {recentDaySessions.length === 0 &&
+                        olderSessions.length === 0 && (
+                          <p className="sidebar-empty sidebar-group-empty">
+                            {t("sidebarNoSessions")}
+                          </p>
+                        )}
+                    </SidebarGroupPanel>
+                  )}
+                </div>
+              </>
             )}
           </SidebarNavSection>
 
@@ -488,112 +840,6 @@ export function Sidebar({
             </div>
           )}
 
-          {recentDaySessions.length > 0 && (
-            <div className="sidebar-section">
-              <h3 className="sidebar-section-title">
-                {t("sidebarSectionLast24Hours")}
-              </h3>
-              <ul className="sidebar-session-list">
-                {recentDaySessions
-                  .slice(0, recentSessionsLimit)
-                  .map((session) => (
-                    <SessionListItem
-                      key={session.id}
-                      sessionId={session.id}
-                      projectId={session.projectId}
-                      title={getSessionDisplayTitle(session)}
-                      fullTitle={getSessionDisplayTitle(session)}
-                      provider={session.provider}
-                      status={session.ownership}
-                      pendingInputType={session.pendingInputType}
-                      hasUnread={session.hasUnread}
-                      isStarred={session.isStarred}
-                      isArchived={session.isArchived}
-                      mode="compact"
-                      isCurrent={session.id === currentSessionId}
-                      activity={session.activity}
-                      onNavigate={onNavigate}
-                      showProjectName
-                      projectName={session.projectName}
-                      basePath={basePath}
-                      messageCount={session.messageCount}
-                      hasDraft={drafts.has(session.id)}
-                    />
-                  ))}
-              </ul>
-              {recentDaySessions.length > recentSessionsLimit && (
-                <button
-                  type="button"
-                  className="sidebar-show-more"
-                  onClick={() =>
-                    setRecentSessionsLimit(
-                      (prev) => prev + RECENT_SESSIONS_INCREMENT,
-                    )
-                  }
-                >
-                  {t("actionShowMore", {
-                    count: Math.min(
-                      RECENT_SESSIONS_INCREMENT,
-                      recentDaySessions.length - recentSessionsLimit,
-                    ),
-                  })}
-                </button>
-              )}
-            </div>
-          )}
-
-          {olderSessions.length > 0 && (
-            <div className="sidebar-section">
-              <h3 className="sidebar-section-title">
-                {t("sidebarSectionOlder")}
-              </h3>
-              <ul className="sidebar-session-list">
-                {olderSessions.slice(0, olderSessionsLimit).map((session) => (
-                  <SessionListItem
-                    key={session.id}
-                    sessionId={session.id}
-                    projectId={session.projectId}
-                    title={getSessionDisplayTitle(session)}
-                    fullTitle={getSessionDisplayTitle(session)}
-                    provider={session.provider}
-                    status={session.ownership}
-                    pendingInputType={session.pendingInputType}
-                    hasUnread={session.hasUnread}
-                    isStarred={session.isStarred}
-                    isArchived={session.isArchived}
-                    mode="compact"
-                    isCurrent={session.id === currentSessionId}
-                    activity={session.activity}
-                    onNavigate={onNavigate}
-                    showProjectName
-                    projectName={session.projectName}
-                    basePath={basePath}
-                    messageCount={session.messageCount}
-                    hasDraft={drafts.has(session.id)}
-                  />
-                ))}
-              </ul>
-              {olderSessions.length > olderSessionsLimit && (
-                <button
-                  type="button"
-                  className="sidebar-show-more"
-                  onClick={() =>
-                    setOlderSessionsLimit(
-                      (prev) => prev + RECENT_SESSIONS_INCREMENT,
-                    )
-                  }
-                >
-                  {t("actionShowMore", {
-                    count: Math.min(
-                      RECENT_SESSIONS_INCREMENT,
-                      olderSessions.length - olderSessionsLimit,
-                    ),
-                  })}
-                </button>
-              )}
-            </div>
-          )}
-
           {filteredStarredSessions.length === 0 &&
             recentDaySessions.length === 0 &&
             olderSessions.length === 0 && (
@@ -604,6 +850,16 @@ export function Sidebar({
               </p>
             )}
         </div>
+
+        {!isCollapsed && (
+          <div
+            className="sidebar-version"
+            title={`Client v${__APP_VERSION__} · build ${__APP_BUILD_ID__}`}
+          >
+            <span>Client v{__APP_VERSION__}</span>
+            <span>build {__APP_BUILD_ID__}</span>
+          </div>
+        )}
 
         {/* Resize handle - desktop only, when expanded */}
         {isDesktop && !isCollapsed && (
