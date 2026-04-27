@@ -11,6 +11,7 @@ import {
   mergeStreamMessage,
 } from "../lib/mergeMessages";
 import { getProvider } from "../providers/registry";
+import type { SessionEntry } from "../session-store";
 import type { Message, Session, SessionStatus } from "../types";
 
 /** Content from a subagent (Task tool) */
@@ -43,6 +44,7 @@ export interface SessionLoadResult {
 export interface UseSessionMessagesOptions {
   projectId: string;
   sessionId: string;
+  initialEntry?: SessionEntry;
   /** Called when initial load completes with session data */
   onLoadComplete?: (result: SessionLoadResult) => void;
   /** Called on load error */
@@ -156,17 +158,30 @@ export function useSessionMessages(
   options: UseSessionMessagesOptions,
 ): UseSessionMessagesResult {
   const { projectId, sessionId, onLoadComplete, onLoadError } = options;
+  const initialEntry = options.initialEntry;
+  const hasInitialEntry = Boolean(initialEntry?.session);
+  const initialEntryRef = useRef(initialEntry);
 
   // Core state
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [agentContent, setAgentContent] = useState<AgentContentMap>({});
-  const [toolUseToAgent, setToolUseToAgent] = useState<Map<string, string>>(
-    () => new Map(),
+  const [messages, setMessages] = useState<Message[]>(
+    () => initialEntry?.messages ?? [],
   );
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState<Session | null>(null);
-  const [pagination, setPagination] = useState<PaginationInfo | undefined>();
-  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [agentContent, setAgentContent] = useState<AgentContentMap>(
+    () => initialEntry?.agentContent ?? {},
+  );
+  const [toolUseToAgent, setToolUseToAgent] = useState<Map<string, string>>(
+    () => new Map(initialEntry?.toolUseToAgent),
+  );
+  const [loading, setLoading] = useState(!hasInitialEntry);
+  const [session, setSession] = useState<Session | null>(
+    () => initialEntry?.session ?? null,
+  );
+  const [pagination, setPagination] = useState<PaginationInfo | undefined>(
+    () => initialEntry?.pagination,
+  );
+  const [loadingOlder, setLoadingOlder] = useState(
+    initialEntry?.loadingOlder ?? false,
+  );
 
   // Buffering: queue stream messages until initial load completes
   const streamBufferRef = useRef<
@@ -185,6 +200,7 @@ export function useSessionMessages(
   // Highest timestamp observed from persisted JSONL messages.
   // Used to suppress startup replay events that are already on disk.
   const maxPersistedTimestampMsRef = useRef<number>(Number.NEGATIVE_INFINITY);
+  const restoredInitialEntryRef = useRef(false);
 
   const updatePersistedTimestampWatermark = useCallback(
     (persistedMessages: Message[]) => {
@@ -288,6 +304,27 @@ export function useSessionMessages(
 
   // Initial load
   useEffect(() => {
+    const restoredEntry = initialEntryRef.current;
+    if (restoredEntry?.session && !restoredInitialEntryRef.current) {
+      restoredInitialEntryRef.current = true;
+      initialLoadCompleteRef.current = true;
+      providerRef.current = restoredEntry.session.provider;
+      updatePersistedTimestampWatermark(restoredEntry.messages);
+      const lastMessage =
+        restoredEntry.messages[restoredEntry.messages.length - 1];
+      if (lastMessage) {
+        lastMessageIdRef.current = getMessageId(lastMessage);
+      }
+      onLoadComplete?.({
+        session: restoredEntry.session,
+        status: restoredEntry.status,
+        pendingInputRequest: restoredEntry.pendingInputRequest,
+        slashCommands: restoredEntry.slashCommands,
+      });
+      setLoading(false);
+      return;
+    }
+
     initialLoadCompleteRef.current = false;
     streamBufferRef.current = [];
     maxPersistedTimestampMsRef.current = Number.NEGATIVE_INFINITY;

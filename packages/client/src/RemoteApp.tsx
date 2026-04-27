@@ -40,6 +40,7 @@ import { useServiceWorkerRegistration } from "./hooks/useServiceWorkerRegistrati
 import { useVersion } from "./hooks/useVersion";
 import { connectionManager } from "./lib/connection";
 import { initClientLogCollection } from "./lib/diagnostics";
+import { SessionStoreProvider } from "./session-store";
 
 interface Props {
   children: ReactNode;
@@ -237,7 +238,9 @@ export function RemoteApp({ children }: Props) {
       <RemoteConnectionProvider>
         <InboxProvider>
           <SchemaValidationProvider>
-            <RemoteAppInner>{children}</RemoteAppInner>
+            <SessionStoreProvider>
+              <RemoteAppInner>{children}</RemoteAppInner>
+            </SessionStoreProvider>
           </SchemaValidationProvider>
         </InboxProvider>
       </RemoteConnectionProvider>

@@ -1,5 +1,5 @@
-import type { ProcessState } from "../hooks/useSession";
 import { useI18n } from "../i18n";
+import type { ProcessState } from "../session-store";
 import type { SessionStatus } from "../types";
 
 interface Props {

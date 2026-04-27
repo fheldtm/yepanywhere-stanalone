@@ -4,8 +4,8 @@ import { AgentContentProvider } from "../../contexts/AgentContentContext";
 import { SchemaValidationProvider } from "../../contexts/SchemaValidationContext";
 import { SessionMetadataProvider } from "../../contexts/SessionMetadataContext";
 import { ToastProvider } from "../../contexts/ToastContext";
-import type { AgentContentMap } from "../../hooks/useSession";
 import { preprocessMessages } from "../../lib/preprocessMessages";
+import type { AgentContentMap } from "../../session-store";
 import type { Message } from "../../types";
 import { RenderItemComponent } from "../RenderItemComponent";
 

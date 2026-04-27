@@ -1,4 +1,9 @@
-import type { ProviderName, UploadedFile } from "@yep-anywhere/shared";
+import type {
+  PromptTool,
+  ProviderName,
+  UploadedFile,
+} from "@yep-anywhere/shared";
+import { ArrowDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -30,14 +35,16 @@ import { useProject } from "../hooks/useProjects";
 import { useProviders } from "../hooks/useProviders";
 import { recordSessionVisit } from "../hooks/useRecentSessions";
 import { useRemoteBasePath } from "../hooks/useRemoteBasePath";
-import {
-  type StreamingMarkdownCallbacks,
-  useSession,
-} from "../hooks/useSession";
 import { useI18n } from "../i18n";
 import { useNavigationLayout } from "../layouts";
 import { preprocessMessages } from "../lib/preprocessMessages";
 import { generateUUID } from "../lib/uuid";
+import {
+  type StreamingMarkdownCallbacks,
+  createSessionKey,
+  useSessionController,
+  useSessionStore,
+} from "../session-store";
 import { getSessionDisplayTitle } from "../utils";
 
 export function SessionPage() {
@@ -81,6 +88,10 @@ function SessionPageContent({
     useNavigationLayout();
   const basePath = useRemoteBasePath();
   const { project } = useProject(projectId);
+  const sessionStore = useSessionStore();
+  const cachedSessionEntry = sessionStore.getEntry(
+    createSessionKey(projectId, sessionId),
+  );
   const navigate = useNavigate();
   const location = useLocation();
   // Get initial status and title from navigation state (passed by NewSessionPage)
@@ -127,6 +138,7 @@ function SessionPageContent({
     pendingInputRequest,
     actualSessionId,
     permissionMode,
+    modeVersion,
     loading,
     error,
     connected,
@@ -150,11 +162,12 @@ function SessionPageContent({
     loadingOlder,
     loadOlderMessages,
     reconnectStream,
-  } = useSession(
+  } = useSessionController(
     projectId,
     sessionId,
     initialStatus,
     streamingMarkdownCallbacks,
+    cachedSessionEntry,
   );
 
   // Developer mode settings
@@ -170,14 +183,48 @@ function SessionPageContent({
   const effectiveModel = session?.model ?? initialModel;
 
   const [scrollTrigger, setScrollTrigger] = useState(0);
+  const [isAtMessageBottom, setIsAtMessageBottom] = useState(true);
   const draftControlsRef = useRef<DraftControls | null>(null);
+  const sessionMessagesRef = useRef<HTMLElement | null>(null);
+  const wasAtMessageBottomRef = useRef(true);
+  const latestStatusRef = useRef(status);
+  const latestProcessStateRef = useRef(processState);
   const handleDraftControlsReady = useCallback((controls: DraftControls) => {
     draftControlsRef.current = controls;
   }, []);
   const { showToast } = useToastContext();
 
+  const scrollMessagesToBottom = useCallback(() => {
+    const container = sessionMessagesRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight - container.clientHeight;
+    wasAtMessageBottomRef.current = true;
+    setIsAtMessageBottom(true);
+  }, []);
+
   // Sharing: check if configured (hidden unless sharing.json exists on server)
   const [sharingConfigured, setSharingConfigured] = useState(false);
+  useEffect(() => {
+    latestStatusRef.current = status;
+    latestProcessStateRef.current = processState;
+  }, [status, processState]);
+
+  useEffect(() => {
+    const key = createSessionKey(projectId, sessionId);
+    return () => {
+      const latestStatus = latestStatusRef.current;
+      const latestProcessState = latestProcessStateRef.current;
+      sessionStore.patchEntry(key, {
+        lifecycleState:
+          latestStatus.owner === "self" ||
+          latestProcessState === "in-turn" ||
+          latestProcessState === "waiting-input"
+            ? "warm"
+            : "cold",
+      });
+    };
+  }, [projectId, sessionId, sessionStore]);
+
   useEffect(() => {
     api
       .getSharingStatus()
@@ -197,6 +244,40 @@ function SessionPageContent({
     }
     return slashCommands;
   }, [slashCommands, status.owner]);
+  const [promptTools, setPromptTools] = useState<PromptTool[]>([]);
+
+  useEffect(() => {
+    const provider = effectiveProvider;
+    const processId = status.owner === "self" ? status.processId : undefined;
+    if (!provider && !processId) {
+      setPromptTools([]);
+      return;
+    }
+
+    let cancelled = false;
+    api
+      .getPromptTools({ provider, processId })
+      .then(({ tools }) => {
+        if (!cancelled) setPromptTools(tools);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPromptTools(
+            allSlashCommands.map((name) => ({
+              id: `${provider ?? "unknown"}:/${name}`,
+              trigger: "/",
+              name,
+              provider: provider ?? "claude",
+              source: name === "model" ? "builtin" : "sdk",
+            })),
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveProvider, status, allSlashCommands]);
 
   // Get provider capabilities based on session's provider
   const { providers } = useProviders();
@@ -492,13 +573,26 @@ function SessionPageContent({
     [setSessionModel, showToast, t],
   );
 
-  const handleCustomCommand = useCallback((command: string) => {
-    if (command === "model") {
-      setShowModelSwitchModal(true);
-      return true;
-    }
-    return false;
-  }, []);
+  const handleCustomCommand = useCallback(
+    (command: string) => {
+      if (command === "model") {
+        setShowModelSwitchModal(true);
+        return true;
+      }
+      if (command === "status") {
+        setShowProcessInfoModal(true);
+        return true;
+      }
+      if (command === "diff") {
+        navigate(
+          `${basePath}/projects/${encodeURIComponent(projectId)}/git-status`,
+        );
+        return true;
+      }
+      return false;
+    },
+    [basePath, navigate, projectId],
+  );
 
   const handleAbort = async () => {
     if (status.owner === "self" && status.processId) {
@@ -715,6 +809,170 @@ function SessionPageContent({
 
   // Update browser tab title
   useDocumentTitle(project?.name, displayTitle);
+
+  useEffect(() => {
+    const pendingInputType =
+      pendingInputRequest?.type === "tool-approval"
+        ? "tool-approval"
+        : pendingInputRequest
+          ? "user-question"
+          : undefined;
+    const key = sessionStore.openTab(projectId, sessionId, {
+      title: displayTitle,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      activate: true,
+    });
+    sessionStore.patchEntry(key, {
+      actualSessionId,
+      session,
+      messages,
+      agentContent,
+      toolUseToAgent,
+      markdownAugments,
+      pagination,
+      loading,
+      loadingOlder,
+      error,
+      status,
+      processState,
+      pendingInputRequest,
+      pendingMessages,
+      deferredMessages,
+      slashCommands: allSlashCommands.map((name) => ({
+        name,
+        description: "",
+      })),
+      sessionTools,
+      mcpServers,
+      lastStreamActivityAt,
+      isCompacting,
+      mode: permissionMode,
+      modeVersion,
+      lifecycleState: "hot",
+      ...(loading
+        ? {}
+        : {
+            lastHydratedAt:
+              sessionStore.getEntry(key)?.lastHydratedAt ?? Date.now(),
+          }),
+    });
+    sessionStore.updateTabMetadata(key, {
+      title: displayTitle,
+      provider: effectiveProvider,
+      model: effectiveModel,
+      activity: processState === "idle" ? undefined : processState,
+      pendingInputType,
+      hasUnread: session?.hasUnread,
+    });
+  }, [
+    projectId,
+    sessionId,
+    sessionStore,
+    displayTitle,
+    effectiveProvider,
+    effectiveModel,
+    actualSessionId,
+    session,
+    messages,
+    agentContent,
+    toolUseToAgent,
+    markdownAugments,
+    pagination,
+    loading,
+    loadingOlder,
+    error,
+    status,
+    processState,
+    pendingInputRequest,
+    pendingMessages,
+    deferredMessages,
+    allSlashCommands,
+    sessionTools,
+    mcpServers,
+    lastStreamActivityAt,
+    isCompacting,
+    permissionMode,
+    modeVersion,
+  ]);
+
+  useEffect(() => {
+    if (loading || messages.length === 0) return;
+
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom();
+      requestAnimationFrame(scrollMessagesToBottom);
+    });
+
+    const followUpScroll = window.setTimeout(scrollMessagesToBottom, 80);
+    return () => window.clearTimeout(followUpScroll);
+  }, [loading, messages.length, scrollMessagesToBottom]);
+
+  useEffect(() => {
+    const scrollToBottomIfPinned = () => {
+      if (!wasAtMessageBottomRef.current) return;
+      scrollMessagesToBottom();
+    };
+
+    const schedulePinnedScroll = () => {
+      if (!wasAtMessageBottomRef.current) return;
+      requestAnimationFrame(() => {
+        scrollToBottomIfPinned();
+        requestAnimationFrame(scrollToBottomIfPinned);
+      });
+      window.setTimeout(scrollToBottomIfPinned, 120);
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (!target.matches("textarea,input,[contenteditable='true']")) return;
+      if (!target.closest(".session-input")) return;
+      schedulePinnedScroll();
+    };
+
+    window.visualViewport?.addEventListener("resize", schedulePinnedScroll);
+    window.visualViewport?.addEventListener("scroll", schedulePinnedScroll);
+    window.addEventListener("resize", schedulePinnedScroll);
+    document.addEventListener("focusin", handleFocusIn);
+
+    return () => {
+      window.visualViewport?.removeEventListener(
+        "resize",
+        schedulePinnedScroll,
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        schedulePinnedScroll,
+      );
+      window.removeEventListener("resize", schedulePinnedScroll);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
+  }, [scrollMessagesToBottom]);
+
+  const handleSessionMessagesScroll = useCallback(() => {
+    const container = sessionMessagesRef.current;
+    if (container) {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const atBottom = distanceFromBottom < 8;
+      wasAtMessageBottomRef.current = atBottom;
+      setIsAtMessageBottom(distanceFromBottom < 80);
+    }
+
+    const key = createSessionKey(projectId, sessionId);
+    sessionStore.setUiState(key, {
+      scrollTop: container?.scrollTop ?? 0,
+    });
+  }, [projectId, sessionId, sessionStore]);
+
+  const handleDraftChange = useCallback(
+    (text: string) => {
+      const key = createSessionKey(projectId, sessionId);
+      sessionStore.setDraftText(key, text);
+    },
+    [projectId, sessionId, sessionStore],
+  );
 
   const handleStartEditingTitle = () => {
     setRenameValue(displayTitle);
@@ -1086,19 +1344,27 @@ function SessionPageContent({
             />
           )}
 
-        {status.owner === "external" && (
-          <div className="external-session-warning">
-            {t("sessionExternalWarning")}
+        {(status.owner === "external" || hasPendingToolCalls) && (
+          <div className="session-floating-alerts" aria-live="polite">
+            {status.owner === "external" && (
+              <div className="session-floating-alert">
+                {t("sessionExternalWarning")}
+              </div>
+            )}
+
+            {hasPendingToolCalls && (
+              <div className="session-floating-alert">
+                {t("sessionPendingElsewhereWarning")}
+              </div>
+            )}
           </div>
         )}
 
-        {hasPendingToolCalls && (
-          <div className="external-session-warning pending-tool-warning">
-            {t("sessionPendingElsewhereWarning")}
-          </div>
-        )}
-
-        <main className="session-messages">
+        <main
+          ref={sessionMessagesRef}
+          className="session-messages"
+          onScroll={handleSessionMessagesScroll}
+        >
           <SessionMetadataProvider
             projectId={projectId}
             projectPath={project?.path ?? null}
@@ -1135,6 +1401,17 @@ function SessionPageContent({
         </main>
 
         <footer className="session-input">
+          {!isAtMessageBottom && (
+            <button
+              type="button"
+              className="scroll-to-bottom-button"
+              onClick={scrollMessagesToBottom}
+              aria-label="Scroll to bottom"
+              title="Scroll to bottom"
+            >
+              <ArrowDown size={18} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          )}
           <div className="session-input-inner">
             {/* User question panel */}
             {pendingInputRequest &&
@@ -1219,6 +1496,7 @@ function SessionPageContent({
                 onStop={handleAbort}
                 draftKey={`draft-message-${sessionId}`}
                 onDraftControlsReady={handleDraftControlsReady}
+                onDraftChange={handleDraftChange}
                 collapsed={
                   !!(
                     pendingInputRequest &&
@@ -1233,6 +1511,7 @@ function SessionPageContent({
                 onRemoveAttachment={handleRemoveAttachment}
                 uploadProgress={uploadProgress}
                 slashCommands={status.owner === "self" ? allSlashCommands : []}
+                promptTools={promptTools}
                 onCustomCommand={handleCustomCommand}
               />
             )}

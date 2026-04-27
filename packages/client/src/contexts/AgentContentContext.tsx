@@ -7,8 +7,8 @@ import {
   useState,
 } from "react";
 import { api } from "../api/client";
-import type { AgentContent, AgentContentMap } from "../hooks/useSession";
 import { getMessageId } from "../lib/mergeMessages";
+import type { AgentContent, AgentContentMap } from "../session-store";
 import type { Message } from "../types";
 
 interface AgentContentContextValue {
