@@ -1,4 +1,4 @@
-import type { UploadedFile } from "@yep-anywhere/shared";
+import type { PromptTool, UploadedFile } from "@yep-anywhere/shared";
 import {
   type ClipboardEvent,
   type KeyboardEvent,
@@ -57,6 +57,8 @@ interface Props {
   collapsed?: boolean;
   /** Callback to receive draft controls for success/failure handling */
   onDraftControlsReady?: (controls: DraftControls) => void;
+  /** Called whenever committed draft text changes */
+  onDraftChange?: (text: string) => void;
   /** Context usage for displaying usage indicator */
   contextUsage?: ContextUsage;
   /** Project ID for uploads (required to enable attach button) */
@@ -79,6 +81,7 @@ interface Props {
   provider?: string;
   /** Available slash commands (without "/" prefix) */
   slashCommands?: string[];
+  promptTools?: PromptTool[];
   /** Callback for custom client-side commands (e.g., "model"). Return true if handled. */
   onCustomCommand?: (command: string) => boolean;
 }
@@ -98,6 +101,7 @@ export function MessageInput({
   draftKey,
   collapsed: externalCollapsed,
   onDraftControlsReady,
+  onDraftChange,
   contextUsage,
   projectId,
   sessionId,
@@ -109,6 +113,7 @@ export function MessageInput({
   supportsThinkingToggle = true,
   provider,
   slashCommands = [],
+  promptTools,
   onCustomCommand,
 }: Props) {
   const { t } = useI18n();
@@ -181,6 +186,10 @@ export function MessageInput({
   useEffect(() => {
     onDraftControlsReady?.(controls);
   }, [controls, onDraftControlsReady]);
+
+  useEffect(() => {
+    onDraftChange?.(text);
+  }, [text, onDraftChange]);
 
   const handleSubmit = useCallback(() => {
     // Stop voice recording and get any pending interim text
@@ -335,11 +344,11 @@ export function MessageInput({
   }, []);
 
   // Handle slash command selection - insert command into text
-  const handleSlashCommand = useCallback(
-    (command: string) => {
+  const handlePromptTool = useCallback(
+    (tool: PromptTool) => {
+      const command = `${tool.trigger}${tool.name}`;
       // Check if this is a custom client-side command (strip leading "/")
-      const bare = command.startsWith("/") ? command.slice(1) : command;
-      if (onCustomCommand?.(bare)) {
+      if (tool.trigger === "/" && onCustomCommand?.(tool.name)) {
         return; // Custom command handled, don't insert text
       }
       // If text is empty or ends with whitespace, just append the command
@@ -355,6 +364,15 @@ export function MessageInput({
     },
     [text, setText, onCustomCommand],
   );
+  const resolvedPromptTools =
+    promptTools ??
+    slashCommands.map((name) => ({
+      id: `legacy:/${name}`,
+      trigger: "/" as const,
+      name,
+      provider: "claude" as const,
+      source: "sdk" as const,
+    }));
 
   return (
     <div className="message-input-wrapper">
@@ -444,8 +462,8 @@ export function MessageInput({
             onInterimTranscript={handleInterimTranscript}
             onListeningStart={() => textareaRef.current?.focus()}
             voiceDisabled={disabled}
-            slashCommands={slashCommands}
-            onSelectSlashCommand={handleSlashCommand}
+            promptTools={resolvedPromptTools}
+            onSelectPromptTool={handlePromptTool}
             contextUsage={contextUsage}
             isRunning={isRunning}
             isThinking={isThinking}

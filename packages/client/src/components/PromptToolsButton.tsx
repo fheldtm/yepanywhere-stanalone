@@ -1,11 +1,10 @@
-import { Command } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import type { PromptTool } from "@yep-anywhere/shared";
+import { Command, Search } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface PromptToolsButtonProps {
-  /** Available slash commands (without the "/" prefix) */
-  commands: string[];
-  /** Callback when a command is selected */
-  onSelectCommand: (command: string) => void;
+  tools: PromptTool[];
+  onSelectTool: (tool: PromptTool) => void;
   /** Whether the button should be disabled */
   disabled?: boolean;
 }
@@ -15,13 +14,15 @@ interface PromptToolsButtonProps {
  * Selecting a command inserts its prompt syntax into the message input.
  */
 export function PromptToolsButton({
-  commands,
-  onSelectCommand,
+  tools,
+  onSelectTool,
   disabled,
 }: PromptToolsButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -49,6 +50,7 @@ export function PromptToolsButton({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsOpen(false);
+        setQuery("");
         buttonRef.current?.focus();
       }
     };
@@ -57,16 +59,50 @@ export function PromptToolsButton({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
-  const handleCommandClick = useCallback(
-    (command: string) => {
-      onSelectCommand(`/${command}`);
+  const handleToolClick = useCallback(
+    (tool: PromptTool) => {
+      onSelectTool(tool);
       setIsOpen(false);
+      setQuery("");
     },
-    [onSelectCommand],
+    [onSelectTool],
   );
 
+  const handleToggle = useCallback(() => {
+    setIsOpen((open) => {
+      const nextOpen = !open;
+      if (!nextOpen) setQuery("");
+      return nextOpen;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    requestAnimationFrame(() => searchRef.current?.focus());
+  }, [isOpen]);
+
+  const filteredTools = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return tools;
+    return tools.filter((tool) => {
+      const command = `${tool.trigger}${tool.name}`.toLowerCase();
+      return (
+        command.includes(normalizedQuery) ||
+        tool.name.toLowerCase().includes(normalizedQuery) ||
+        tool.description?.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [tools, query]);
+
+  const slashTools = filteredTools.filter((tool) => tool.trigger === "/");
+  const dollarTools = filteredTools.filter((tool) => tool.trigger === "$");
+  const groups = [
+    { label: "Slash commands", tools: slashTools },
+    { label: "Codex skills", tools: dollarTools },
+  ].filter((group) => group.tools.length > 0);
+
   // Don't render if no commands available
-  if (commands.length === 0) {
+  if (tools.length === 0) {
     return null;
   }
 
@@ -76,7 +112,7 @@ export function PromptToolsButton({
         ref={buttonRef}
         type="button"
         className={`slash-command-button ${isOpen ? "active" : ""}`}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         disabled={disabled}
         title="Prompt tools"
         aria-label="Show prompt tools"
@@ -92,17 +128,51 @@ export function PromptToolsButton({
           role="menu"
           aria-label="Prompt tools"
         >
-          {commands.map((command) => (
-            <button
-              key={command}
-              type="button"
-              className="slash-command-item"
-              onClick={() => handleCommandClick(command)}
-              role="menuitem"
-            >
-              /{command}
-            </button>
+          <div className="slash-command-search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search commands"
+              aria-label="Search prompt tools"
+            />
+          </div>
+          {groups.map((group) => (
+            <div key={group.label} className="slash-command-group">
+              <div className="slash-command-group-label">{group.label}</div>
+              {group.tools.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  className="slash-command-item"
+                  onClick={() => handleToolClick(tool)}
+                  role="menuitem"
+                  title={tool.description}
+                >
+                  <span className="slash-command-name">
+                    {tool.trigger}
+                    {tool.name}
+                    {tool.argumentHint && (
+                      <span className="slash-command-argument">
+                        {" "}
+                        {tool.argumentHint}
+                      </span>
+                    )}
+                  </span>
+                  {tool.description && (
+                    <span className="slash-command-description">
+                      {tool.description}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
+          {groups.length === 0 && (
+            <div className="slash-command-empty">No commands found</div>
+          )}
         </div>
       )}
     </div>

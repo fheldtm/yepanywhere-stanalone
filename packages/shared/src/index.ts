@@ -21,6 +21,7 @@ export type {
   ProviderInfo,
   ModelInfo,
   SlashCommand,
+  PromptTool,
   PermissionMode,
   NewSessionDefaults,
   ModelOption,

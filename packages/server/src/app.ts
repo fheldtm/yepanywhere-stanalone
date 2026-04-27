@@ -52,6 +52,7 @@ import { createNetworkBindingRoutes } from "./routes/network-binding.js";
 import { createOnboardingRoutes } from "./routes/onboarding.js";
 import { createProcessesRoutes } from "./routes/processes.js";
 import { createProjectsRoutes } from "./routes/projects.js";
+import { createPromptToolsRoutes } from "./routes/prompt-tools.js";
 import { createProvidersRoutes } from "./routes/providers.js";
 import { createRecentsRoutes } from "./routes/recents.js";
 import { createServerAdminRoutes } from "./routes/server-admin.js";
@@ -674,6 +675,13 @@ export function createApp(options: AppOptions): AppResult {
     createProvidersRoutes({
       modelInfoService: options.modelInfoService,
       enabledProviders: options.enabledProviders,
+    }),
+  );
+
+  app.route(
+    "/api",
+    createPromptToolsRoutes({
+      supervisor,
     }),
   );
 
