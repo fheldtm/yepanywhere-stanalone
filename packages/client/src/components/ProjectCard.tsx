@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { shortenPath } from "../lib/text";
 import type { Project } from "../types";
@@ -64,27 +65,17 @@ export function ProjectCard({
             )}
             {project.name}
           </strong>
-          <button
-            type="button"
-            className="project-card__new-session"
-            onClick={handleNewSession}
-            title="New session"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+          <span className="project-card__actions">
+            <button
+              type="button"
+              className="project-card__action-button"
+              onClick={handleNewSession}
+              title="New session"
+              aria-label={`New session for ${project.name}`}
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+              <Plus size={16} aria-hidden="true" />
+            </button>
+          </span>
         </div>
         <div className="project-card__meta">
           <span className="project-card__path" title={project.path}>
