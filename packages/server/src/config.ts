@@ -103,6 +103,8 @@ export interface Config {
   enabledProviders: string[];
   /** Whether voice input is enabled. Default: true */
   voiceInputEnabled: boolean;
+  /** Whether browser-based terminal access is enabled. Default: false */
+  terminalEnabled: boolean;
   /** Allowed directory prefixes for serving local images (e.g., ["/tmp"]). Empty = disabled. */
   allowedImagePaths: string[];
 
@@ -250,6 +252,7 @@ export function loadConfig(): Config {
       : [],
     // Voice input (default: true, set VOICE_INPUT=false to disable)
     voiceInputEnabled: process.env.VOICE_INPUT !== "false",
+    terminalEnabled: process.env.TERMINAL_ENABLED === "true",
     // Always allow yep-managed uploads. ALLOWED_IMAGE_PATHS adds external paths
     // like /tmp; an empty value disables only those extras.
     allowedImagePaths: Array.from(

@@ -32,6 +32,7 @@ import { initializeTabSize } from "./hooks/useTabSize";
 import { initializeTheme } from "./hooks/useTheme";
 import { I18nProvider } from "./i18n";
 import { NavigationLayout } from "./layouts";
+import { enableRippleFeedback } from "./lib/rippleFeedback";
 import { ActivityPage } from "./pages/ActivityPage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { DirectLoginPage } from "./pages/DirectLoginPage";
@@ -46,6 +47,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { RelayConnectionGate } from "./pages/RelayConnectionGate";
 import { RelayLoginPage } from "./pages/RelayLoginPage";
 import { SessionPage } from "./pages/SessionPage";
+import { TerminalPage } from "./pages/TerminalPage";
 import { SettingsLayout } from "./pages/settings";
 import "./styles/index.css";
 
@@ -54,6 +56,7 @@ initializeTheme();
 initializeFontFamilies();
 initializeFontSize();
 initializeTabSize();
+enableRippleFeedback();
 
 // Get base URL for router (Vite sets this based on --base flag)
 // Remove trailing slash for BrowserRouter basename
@@ -77,6 +80,7 @@ const APP_ROUTES = (
       <Route path="git-status" element={<GitStatusPage />} />
       <Route path="devices" element={<EmulatorPage />} />
       <Route path="devices/:deviceId" element={<EmulatorPage />} />
+      <Route path="terminal" element={<TerminalPage />} />
       <Route path="settings" element={<SettingsLayout />} />
       <Route path="settings/:category" element={<SettingsLayout />} />
       <Route path="new-session" element={<NewSessionPage />} />
