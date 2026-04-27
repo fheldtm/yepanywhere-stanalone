@@ -60,6 +60,7 @@ import { createSessionsRoutes } from "./routes/sessions.js";
 import { createSettingsRoutes } from "./routes/settings.js";
 import { createSharingRoutes } from "./routes/sharing.js";
 import { ClaudeOllamaProvider } from "./sdk/providers/claude-ollama.js";
+import { codexProvider } from "./sdk/providers/codex.js";
 
 import { createLocalImageRoutes } from "./routes/local-image.js";
 import { type UploadDeps, createUploadRoutes } from "./routes/upload.js";
@@ -568,6 +569,7 @@ export function createApp(options: AppOptions): AppResult {
       supervisor,
       scanner,
       readerFactory,
+      codexProvider,
       processSessionSourceFactory: (process, project) => {
         const persistedProvider = options.sessionMetadataService?.getProvider(
           process.sessionId,
